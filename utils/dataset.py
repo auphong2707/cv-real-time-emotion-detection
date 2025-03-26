@@ -20,10 +20,16 @@ def download_data(data_dir="data"):
     for item in os.listdir(path):
         src = os.path.join(path, item)
         dst = os.path.join(data_dir, item)
-        shutil.move(src, dst)
+        
+        if os.path.isdir(src):
+            # Recursively copy directories
+            shutil.copytree(src, dst, dirs_exist_ok=True)
+        else:
+            # Copy individual files
+            shutil.copy2(src, dst)
     
     # 4. Remove the now-empty folder "1"
-    os.rmdir(path)
+    # os.rmdir(path)
 
     print(f"Data downloaded and placed in '{data_dir}'")
 
