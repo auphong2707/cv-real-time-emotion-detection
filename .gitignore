@@ -175,3 +175,5 @@ data/
 
 # Temporary files
 tmp/
+
+checkpoints/
