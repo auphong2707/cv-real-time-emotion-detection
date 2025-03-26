@@ -47,10 +47,13 @@ def main():
     # ---------------------------
     # 2. Data Loading
     # ---------------------------
+    print("Downloading data...")
     download_data()
     
+    print("Splitting data into train and val folders...")
     split_data(constants.DATA_DIR, val_split=0.2)
 
+    print("Creating data loaders...")
     train_loader, val_loader, test_loader, num_classes = get_data_loaders(
         data_dir=constants.DATA_DIR,
         batch_size=BATCH_SIZE,
@@ -61,6 +64,7 @@ def main():
     # ---------------------------
     # 3. Model Creation
     # ---------------------------
+    print("Creating model...")
     model = get_mobilenetv3(
         num_classes=num_classes,
         pretrained=PRETRAINED,
@@ -71,6 +75,7 @@ def main():
     # ---------------------------
     # 4. Define Loss & Optimizer
     # ---------------------------
+    print("Defining loss and optimizer...")
     criterion = nn.CrossEntropyLoss()
     if FREEZE:
         optimizer = optim.Adam(
@@ -83,6 +88,7 @@ def main():
     # ---------------------------
     # 5. Training Loop
     # ---------------------------
+    print("Starting training loop...")
     best_val_acc = 0.0
     for epoch in range(EPOCHS):
         print(f"Epoch [{epoch+1}/{EPOCHS}]")
