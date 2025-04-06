@@ -14,7 +14,7 @@ def download_data(data_dir="data"):
         print(f"Data already exists in '{data_dir}'. Skipping download.")
         return
     # 1. Download the dataset
-    path = kagglehub.dataset_download("ananthu017/emotion-detection-fer")
+    path = kagglehub.dataset_download("ananthu017/emotion-detection-fer", threads=4)
     # For example, path might end up as "...some_temp_dir/1" after download/unzip.
 
     # 2. Ensure data_dir exists
