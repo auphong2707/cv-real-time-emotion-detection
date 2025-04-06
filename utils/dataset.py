@@ -3,11 +3,16 @@ import shutil
 import torch
 from torchvision import datasets, transforms
 import kagglehub
+from utils.custom_tranformation import *
 
 def download_data(data_dir="data"):
     """
     Downloads the FER-2013 dataset from Kaggle and places its contents directly into data_dir.
     """
+    # 0. Check if the dataset is already downloaded
+    if os.path.exists(data_dir):
+        print(f"Data already exists in '{data_dir}'. Skipping download.")
+        return
     # 1. Download the dataset
     path = kagglehub.dataset_download("ananthu017/emotion-detection-fer")
     # For example, path might end up as "...some_temp_dir/1" after download/unzip.
@@ -37,6 +42,11 @@ def split_data(data_dir="data", val_split=0.2):
     """
     Splits the data in data_dir into train and val folders.
     """
+    # 0. Check if the dataset is already split
+    if os.path.exists(os.path.join(data_dir, "val")):
+        print(f"Validation data already exists in '{data_dir}/val'. Skipping split.")
+        return
+
     # 1. Ensure data_dir exists
     if not os.path.exists(data_dir):
         raise FileNotFoundError(f"Data directory '{data_dir}' not found.")
@@ -66,7 +76,7 @@ def get_data_loaders(
     data_dir="data",
     batch_size=64,
     image_size=224,
-    num_workers=-1,
+    num_workers=os.cpu_count(),
 ):
     """
     Returns PyTorch DataLoaders for training, validation, and test sets.
@@ -78,9 +88,18 @@ def get_data_loaders(
 
     train_transforms = transforms.Compose([
         transforms.Resize((image_size, image_size)),
-        transforms.RandomHorizontalFlip(),
+        CLAHEEqualization(clip_limit=4.0, tile_grid_size=(4, 4)),  # CLAHE,
+        GammaCorrection(gamma=1.5),  # Gamma correction
+        transforms.RandomHorizontalFlip(p=0.5),  # Flip face left-right (safe for emotion/ID)
+        transforms.RandomRotation(degrees=10),   # Slight head tilt
+        transforms.RandomAffine(
+            degrees=0,
+            translate=(0.05, 0.05),              # Slight shift
+            scale=(0.95, 1.05),                  # Minor scaling
+            shear=5                              # Slight slant
+        ),
         transforms.ToTensor(),
-        transforms.Normalize([0.5]*3, [0.5]*3)
+        transforms.Normalize([0.5], [0.5])       # Grayscale normalization
     ])
 
     val_test_transforms = transforms.Compose([
@@ -106,5 +125,11 @@ def get_data_loaders(
     test_loader = torch.utils.data.DataLoader(
         test_dataset, batch_size=batch_size, shuffle=False, num_workers=num_workers
     )
+
+    print("Data loaders created:")
+    print(f"   Train: {len(train_loader.dataset)} samples")
+    print(f"   Validation: {len(val_loader.dataset)} samples")
+    print(f"   Test: {len(test_loader.dataset)} samples")
+    print(f"   Number of classes: {len(train_dataset.classes)}")
 
     return train_loader, val_loader, test_loader, len(train_dataset.classes)
