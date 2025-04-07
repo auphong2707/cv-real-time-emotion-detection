@@ -1,6 +1,5 @@
-import torch
 import torch.nn as nn
-from torchvision import models
+from torchvision.models import mobilenet_v3_large, MobileNet_V3_Large_Weights
 
 
 def get_mobilenetv3(num_classes=7, pretrained=True, freeze=False):
@@ -14,9 +13,11 @@ def get_mobilenetv3(num_classes=7, pretrained=True, freeze=False):
     :return: A MobileNetV3 model ready for training/fine-tuning.
     """
     if pretrained:
-        model = models.mobilenet_v3_large(pretrained=True)
+        weights = MobileNet_V3_Large_Weights.IMAGENET1K_V1  # or .DEFAULT for latest
     else:
-        model = models.mobilenet_v3_large(pretrained=False)
+        weights = None
+    
+    model = mobilenet_v3_large(weights=weights)
 
     # Replace the final classification layer
     in_features = model.classifier[-1].in_features
@@ -29,3 +30,8 @@ def get_mobilenetv3(num_classes=7, pretrained=True, freeze=False):
 
     return model
 
+if __name__ == "__main__":
+    # Example usage
+    model = get_mobilenetv3(num_classes=8, pretrained=True, freeze=False)
+    trainable_params = list(filter(lambda p: p.requires_grad, model.parameters()))
+    print(f"✅ Trainable parameters: {sum(p.numel() for p in trainable_params)}")
