@@ -24,7 +24,7 @@ def get_mobilenetv3(num_classes=7, pretrained=True, freeze=False):
 
     # Freeze feature extraction layers if desired
     if freeze:
-        for param in model.parameters():
+        for param in model.features.parameters():
             param.requires_grad = False
 
     return model
