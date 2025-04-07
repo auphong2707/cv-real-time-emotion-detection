@@ -39,7 +39,7 @@ FREEZE_EFN_B0 = False
 #
 # ViT Constants
 #
-MODEL_NAME_VIT = "vit_base_patch16_224"
+MODEL_NAME_VIT = "deit_base_patch16_224"
 EPOCHS_VIT = 30
 BATCH_SIZE_VIT = 32
 IMAGE_SIZE_VIT = 224
