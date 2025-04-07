@@ -1,9 +1,9 @@
 import os
-import shutil
 import torch
 from torchvision import datasets, transforms
-import kagglehub
 from utils.custom_tranformation import *
+from huggingface_hub import HfApi
+import zipfile
 
 def download_data(data_dir="data"):
     """
@@ -13,67 +13,30 @@ def download_data(data_dir="data"):
     if os.path.exists(data_dir):
         print(f"Data already exists in '{data_dir}'. Skipping download.")
         return
-    # 1. Download the dataset
-    path = kagglehub.dataset_download("ananthu017/emotion-detection-fer")
-    # For example, path might end up as "...some_temp_dir/1" after download/unzip.
-
-    # 2. Ensure data_dir exists
-    if not os.path.exists(data_dir):
-        os.makedirs(data_dir)
     
-    # 3. Move everything inside path -> data_dir
-    for item in os.listdir(path):
-        src = os.path.join(path, item)
-        dst = os.path.join(data_dir, item)
-        
-        if os.path.isdir(src):
-            # Recursively copy directories
-            shutil.copytree(src, dst, dirs_exist_ok=True)
-        else:
-            # Copy individual files
-            shutil.copy2(src, dst)
-    
-    # 4. Remove the now-empty folder "1"
-    # os.rmdir(path)
-
-    print(f"Data downloaded and placed in '{data_dir}'")
-
-def split_data(data_dir="data", val_split=0.2):
-    """
-    Splits the data in data_dir into train and val folders.
-    """
-    # 0. Check if the dataset is already split
-    if os.path.exists(os.path.join(data_dir, "val")):
-        print(f"Validation data already exists in '{data_dir}/val'. Skipping split.")
-        return
-
     # 1. Ensure data_dir exists
     if not os.path.exists(data_dir):
-        raise FileNotFoundError(f"Data directory '{data_dir}' not found.")
-    
-    # 2. Create val folder
-    val_dir = os.path.join(data_dir, "val")
-    if not os.path.exists(val_dir):
-        os.makedirs(val_dir)
+        os.makedirs(data_dir)
 
-    # 3. Read the data from train folder and split
-    for class_name in os.listdir(os.path.join(data_dir, "train")):
-        class_dir = os.path.join(data_dir, "train", class_name)
-        files = os.listdir(class_dir)
-        split_idx = int(len(files) * val_split)
-        val_files = files[:split_idx]
+    # 2. Download the dataset
+    api = HfApi(token=os.getenv("HF_TOKEN"))
+    api.hf_hub_download(
+        repo_id="auphong2707/affect-net",
+        filename="archive.zip",
+        repo_type="dataset",
+        revision="main",
+        local_dir="./data",
+    )
 
-        # Move val files to val folder
-        for file in val_files:
-            src = os.path.join(class_dir, file)
-            dst = os.path.join(val_dir, class_name, file)
-            os.makedirs(os.path.join(val_dir, class_name), exist_ok=True)
-            shutil.move(src, dst)
+    # 3. Unzip the dataset
+    archive_path = "./data/archive.zip"
+    with zipfile.ZipFile(archive_path, 'r') as zip_ref:
+        zip_ref.extractall("./data")
 
-    print(f"Data split into train and val folders in '{data_dir}'")
+    print("Archive unzipped successfully.")
 
 def get_data_loaders(
-    data_dir="data",
+    data_dir="data/AffectNet",
     batch_size=64,
     image_size=224,
     num_workers=os.cpu_count(),
@@ -88,18 +51,37 @@ def get_data_loaders(
 
     train_transforms = transforms.Compose([
         transforms.Resize((image_size, image_size)),
-        CLAHEEqualization(clip_limit=4.0, tile_grid_size=(4, 4)),  # CLAHE,
-        GammaCorrection(gamma=1.5),  # Gamma correction
-        transforms.RandomHorizontalFlip(p=0.5),  # Flip face left-right (safe for emotion/ID)
-        transforms.RandomRotation(degrees=10),   # Slight head tilt
+
+        # Optional: Slight brightness/contrast/saturation changes
+        transforms.ColorJitter(brightness=0.2, contrast=0.2, saturation=0.2),
+
+        # CLAHE and gamma correction (use your custom transforms here)
+        CLAHEEqualization(clip_limit=4.0, tile_grid_size=(4, 4)),
+        GammaCorrection(gamma=1.5),
+
+        # Horizontal flip is safe and effective
+        transforms.RandomHorizontalFlip(p=0.5),
+
+        # Small rotation, shift, scaling, and shearing
+        transforms.RandomRotation(degrees=10),
         transforms.RandomAffine(
             degrees=0,
-            translate=(0.05, 0.05),              # Slight shift
-            scale=(0.95, 1.05),                  # Minor scaling
-            shear=5                              # Slight slant
+            translate=(0.05, 0.05),
+            scale=(0.95, 1.05),
+            shear=5
         ),
+
+        # Slight blur to simulate different image sharpness
+        transforms.GaussianBlur(kernel_size=3, sigma=(0.1, 1.0)),
+
+        # Random erasing simulates occlusion (like glasses, hands)
         transforms.ToTensor(),
-        transforms.Normalize([0.5], [0.5])       # Grayscale normalization
+        transforms.Normalize([0.5, 0.5, 0.5], [0.5, 0.5, 0.5]),
+        transforms.RandomErasing(
+            p=0.3,
+            scale=(0.01, 0.05),   # smaller min and max scale
+            ratio=(0.5, 2.0)      # keep it roughly square to rectangular
+        )
     ])
 
     val_test_transforms = transforms.Compose([
