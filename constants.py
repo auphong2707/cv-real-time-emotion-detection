@@ -39,5 +39,5 @@ FREEZE_EFN_B0 = False
 #
 # Shared Constants (Data Paths, etc.)
 #
-DATA_DIR = "data"
+DATA_DIR = "data/AffectNet"
 SAVE_DIR = "checkpoints"
