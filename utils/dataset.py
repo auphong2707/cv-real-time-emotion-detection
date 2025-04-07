@@ -19,7 +19,7 @@ def download_data(data_dir="data"):
         os.makedirs(data_dir)
 
     # 2. Download the dataset
-    api = HfApi(token=os.getenv("HF_TOKEN"))
+    api = HfApi(token=os.getenv("HUGGINGFACE_TOKEN"))
     api.hf_hub_download(
         repo_id="auphong2707/affect-net",
         filename="archive.zip",

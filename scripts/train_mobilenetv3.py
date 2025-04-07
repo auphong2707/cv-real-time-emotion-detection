@@ -49,9 +49,7 @@ def main():
     # ---------------------------
     print("Downloading data...")
     download_data()
-    
-    print("Splitting data into train and val folders...")
-    
+
     print("Creating data loaders...")
     train_loader, val_loader, test_loader, num_classes = get_data_loaders(
         data_dir=constants.DATA_DIR,
