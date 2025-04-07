@@ -2,7 +2,7 @@ import torch.nn as nn
 from torchvision.models import mobilenet_v3_large, MobileNet_V3_Large_Weights
 
 
-def get_mobilenetv3(num_classes=7, pretrained=True, freeze=False):
+def get_mobilenetv3(num_classes=8, pretrained=True, freeze=False):
     """
     Returns a MobileNetV3-Large model, with an option to replace the final layer
     and freeze the feature extractor.
