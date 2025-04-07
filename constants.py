@@ -37,6 +37,17 @@ PRETRAINED_EFN_B0 = True
 FREEZE_EFN_B0 = False
 
 #
+# ViT Constants
+#
+MODEL_NAME_VIT = "vit_base_patch16_224"
+EPOCHS_VIT = 30
+BATCH_SIZE_VIT = 32
+IMAGE_SIZE_VIT = 224
+NUM_WORKERS_VIT = 4
+LR_VIT = 3e-5
+PRETRAINED_VIT = True
+
+#
 # Shared Constants (Data Paths, etc.)
 #
 DATA_DIR = "data/AffectNet"
