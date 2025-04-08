@@ -52,4 +52,4 @@ PRETRAINED_VIT = True
 # Shared Constants (Data Paths, etc.)
 #
 DATA_DIR = "data/AffectNet"
-SAVE_DIR = "checkpoints"
+SAVE_DIR = "results"

@@ -118,7 +118,7 @@ def main():
         device=device,
         EPOCHS=EPOCHS,
         MODEL_NAME=MODEL_NAME,
-        SAVE_DIR=constants.SAVE_DIR
+        SAVE_DIR=EXPERIMENT_SAVE_DIR,
     )
 
     # ---------------------------
@@ -127,7 +127,7 @@ def main():
     print("Evaluating model on test set...")
 
     # --- Load the best model ---
-    best_model_path = os.path.join(constants.SAVE_DIR, f"{MODEL_NAME}_best.pth")
+    best_model_path = os.path.join(EXPERIMENT_SAVE_DIR, f"{MODEL_NAME}_best.pth")
     if os.path.exists(best_model_path):
         print(f"Loading best model from {best_model_path}...")
         model.load_state_dict(torch.load(best_model_path))
