@@ -1,22 +1,27 @@
+import glob
 import os
+import shutil
 import torch
 from torchvision import datasets, transforms
+from tqdm import tqdm
 from utils.custom_tranformation import *
 from huggingface_hub import HfApi
 import zipfile
 
-def download_data(data_dir="data"):
+def download_data(data_dir="data/"):
     """
-    Downloads the FER-2013 dataset from Kaggle and places its contents directly into data_dir.
+    Downloads the dataset from Hugging Face and unzips it.
     """
     # 0. Check if the dataset is already downloaded
     if os.path.exists(data_dir):
         print(f"Data already exists in '{data_dir}'. Skipping download.")
         return
     
-    # 1. Ensure data_dir exists
+    # 1. Ensure directories exists
     if not os.path.exists(data_dir):
         os.makedirs(data_dir)
+    if not os.path.exists("tmp"):
+        os.makedirs("tmp")
 
     # 2. Download the dataset
     api = HfApi(token=os.getenv("HUGGINGFACE_TOKEN"))
@@ -25,18 +30,73 @@ def download_data(data_dir="data"):
         filename="archive.zip",
         repo_type="dataset",
         revision="main",
-        local_dir="./data",
+        local_dir="./tmp",
     )
 
     # 3. Unzip the dataset
-    archive_path = "./data/archive.zip"
+    archive_path = "./tmp/archive.zip"
     with zipfile.ZipFile(archive_path, 'r') as zip_ref:
-        zip_ref.extractall("./data")
+        zip_ref.extractall("./tmp")
 
     print("Archive unzipped successfully.")
 
+    # 4. Change from YOLO format to ImageFolder format
+    yolo_root = os.path.join("tmp", "YOLO_format")
+    output_root = os.path.join(data_dir)
+    if not os.path.exists(output_root):
+        os.makedirs(output_root)
+    
+    change_yolo_to_image_folder(yolo_root, output_root)
+    print("Data downloaded and unzipped successfully.")
+
+def change_yolo_to_image_folder(yolo_root, output_root):
+    """
+    Converts YOLO format dataset to ImageFolder format.
+    Expects a folder structure like:
+      data/train/<class_name>/*.png
+      data/val/<class_name>/*.png
+      data/test/<class_name>/*.png
+    """
+    splits = ["train", "valid", "test"]
+
+    for split in splits:
+        image_dir = os.path.join(yolo_root, split, "images")
+        label_dir = os.path.join(yolo_root, split, "labels")
+        
+        if not os.path.exists(image_dir) or not os.path.exists(label_dir):
+            print(f"Skipping {split} — images or labels folder missing.")
+            continue
+
+        image_paths = glob.glob(os.path.join(image_dir, "*.*"))
+
+        print(f"Converting {split} set with {len(image_paths)} images...")
+        for image_path in tqdm(image_paths):
+            # Get base name (e.g., img123.png → img123)
+            base_name = os.path.splitext(os.path.basename(image_path))[0]
+            label_path = os.path.join(label_dir, base_name + ".txt")
+
+            # Skip if label doesn't exist
+            if not os.path.exists(label_path):
+                continue
+
+            # Read first line of label to get class ID
+            with open(label_path, "r") as f:
+                line = f.readline().strip()
+                if not line:
+                    continue
+                class_id = line.split()[0]
+
+            # Create target directory
+            target_dir = os.path.join(output_root, split, class_id)
+            os.makedirs(target_dir, exist_ok=True)
+
+            # Copy image to new directory
+            shutil.copy(image_path, os.path.join(target_dir, os.path.basename(image_path)))
+
+    print("Conversion complete.")
+
 def get_data_loaders(
-    data_dir="data/AffectNet",
+    data_dir="data/",
     batch_size=64,
     image_size=224,
     num_workers=os.cpu_count(),
