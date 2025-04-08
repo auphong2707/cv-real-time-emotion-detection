@@ -7,6 +7,17 @@ from sklearn.metrics import confusion_matrix
 import seaborn as sns
 import matplotlib.pyplot as plt
 
+ID2LABEL = {
+    0: "Anger",
+    1: "Contempt",
+    2: "Disgust",
+    3: "Fear",
+    4: "Happy",
+    5: "Neutral",
+    6: "Sad",
+    7: "Surprise"
+}
+
 def train_one_epoch(model, dataloader, criterion, optimizer, device):
     model.train()
     running_loss = 0.0
@@ -101,7 +112,7 @@ def validate(model, dataloader, criterion, device, confusion_matrix_save_path=No
     if confusion_matrix_save_path:
         cm = confusion_matrix(all_labels, all_preds)
         plt.figure(figsize=(10, 8))
-        sns.heatmap(cm, annot=True, fmt='d', cmap='Blues')
+        sns.heatmap(cm, annot=True, fmt='d', cmap='Blues', xticklabels=[ID2LABEL[i] for i in range(len(ID2LABEL))], yticklabels=[ID2LABEL[i] for i in range(len(ID2LABEL))])
         plt.title('Confusion Matrix')
         plt.xlabel('Predicted')
         plt.ylabel('True')
@@ -185,9 +196,9 @@ def train_model(
             eval_result['recall_per_class'],
             eval_result['f1_score_per_class']
         )):
-            log_data[f"val/precision_class_{i}"] = p
-            log_data[f"val/recall_class_{i}"] = r
-            log_data[f"val/f1_score_class_{i}"] = f
+            log_data[f"val/precision_class_{ID2LABEL[i]}"] = p
+            log_data[f"val/recall_class_{ID2LABEL[i]}"] = r
+            log_data[f"val/f1_score_class_{ID2LABEL[i]}"] = f
 
         wandb.log(log_data)
 
