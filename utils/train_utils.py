@@ -1,6 +1,6 @@
 import os
 import torch
-from sklearn.metrics import precision_score, recall_score, f1_score
+from sklearn.metrics import precision_recall_fscore_support, precision_score, recall_score, f1_score
 from tqdm import tqdm
 import wandb
 
@@ -70,18 +70,29 @@ def validate(model, dataloader, criterion, device):
     epoch_loss = running_loss / total
     epoch_acc = 100.0 * correct / total
 
-    precision = precision_score(all_labels, all_preds, average='weighted', zero_division=0)
-    recall = recall_score(all_labels, all_preds, average='weighted', zero_division=0)
-    f1 = f1_score(all_labels, all_preds, average='weighted', zero_division=0)
+    # Per-class metrics
+    precision_per_class, recall_per_class, f1_per_class, _ = precision_recall_fscore_support(
+        all_labels,
+        all_preds,
+        average=None,
+        zero_division=0
+    )
+
+    # Overall metrics (weighted average)
+    precision_overall = precision_score(all_labels, all_preds, average='weighted', zero_division=0)
+    recall_overall = recall_score(all_labels, all_preds, average='weighted', zero_division=0)
+    f1_overall = f1_score(all_labels, all_preds, average='weighted', zero_division=0)
 
     result = {
         'loss': epoch_loss,
         'accuracy': epoch_acc,
-        'precision': precision,
-        'recall': recall,
-        'f1_score': f1
+        'precision': precision_overall,
+        'recall': recall_overall,
+        'f1_score': f1_overall,
+        'precision_per_class': precision_per_class.tolist(),
+        'recall_per_class': recall_per_class.tolist(),
+        'f1_score_per_class': f1_per_class.tolist()
     }
-
 
     return result
 
@@ -95,7 +106,7 @@ def train_model(
     EPOCHS,
     MODEL_NAME,
     SAVE_DIR,
-    eval_metrics="f1_score"
+    eval_metrics="f1_score"  # can be: "f1_score", "precision", "recall"
 ):
     print("Starting training loop...")
     best_metric = 0.0
@@ -123,19 +134,27 @@ def train_model(
         # --- Logging ---
         print(f"Epoch {epoch + 1} Summary:\n")
         print("Training Results:")
-        print(f"{' - Loss:':<15} {train_result['loss']:.4f}")
-        print(f"{' - Learning Rate:':<15} {train_result['learning_rate']:.6f}")
-        print(f"{' - Gradient Norm:':<15} {train_result['gradient_norm']:.6f}")
+        print(f"{' - Loss:':<20} {train_result['loss']:.4f}")
+        print(f"{' - Learning Rate:':<20} {train_result['learning_rate']:.6f}")
+        print(f"{' - Gradient Norm:':<20} {train_result['gradient_norm']:.6f}")
 
-        print("\nValidation Results:")
-        print(f"{' - Loss:':<15} {eval_result['loss']:.4f}")
-        print(f"{' - Accuracy:':<15} {eval_result['accuracy']:.2f}%")
-        print(f"{' - Precision:':<15} {eval_result['precision']:.4f}")
-        print(f"{' - Recall:':<15} {eval_result['recall']:.4f}")
-        print(f"{' - F1 Score:':<15} {eval_result['f1_score']:.4f}")
+        print("\nValidation Results (Overall):")
+        print(f"{' - Loss:':<20} {eval_result['loss']:.4f}")
+        print(f"{' - Accuracy:':<20} {eval_result['accuracy']:.2f}%")
+        print(f"{' - Precision:':<20} {eval_result['precision']:.4f}")
+        print(f"{' - Recall:':<20} {eval_result['recall']:.4f}")
+        print(f"{' - F1 Score:':<20} {eval_result['f1_score']:.4f}")
+
+        print("\nValidation Results (Per-Class):")
+        for i, (p, r, f) in enumerate(zip(
+            eval_result['precision_per_class'],
+            eval_result['recall_per_class'],
+            eval_result['f1_score_per_class']
+        )):
+            print(f"  Class {i}: Precision={p:.4f}, Recall={r:.4f}, F1={f:.4f}")
 
         # --- WandB Logging ---
-        wandb.log({
+        log_data = {
             "epoch": epoch + 1,
             "train/loss": train_result['loss'],
             "train/learning_rate": train_result['learning_rate'],
@@ -144,14 +163,25 @@ def train_model(
             "val/accuracy": eval_result['accuracy'],
             "val/precision": eval_result['precision'],
             "val/recall": eval_result['recall'],
-            "val/f1_score": eval_result['f1_score']
-        })
+            "val/f1_score": eval_result['f1_score'],
+        }
 
-        # --- Save best model ---
+        for i, (p, r, f) in enumerate(zip(
+            eval_result['precision_per_class'],
+            eval_result['recall_per_class'],
+            eval_result['f1_score_per_class']
+        )):
+            log_data[f"val/precision_class_{i}"] = p
+            log_data[f"val/recall_class_{i}"] = r
+            log_data[f"val/f1_score_class_{i}"] = f
+
+        wandb.log(log_data)
+
+        # --- Save best model based on overall metric ---
         if eval_result[eval_metrics] > best_metric:
             best_metric = eval_result[eval_metrics]
 
-            print(f"New best {eval_metrics}: {best_metric:.4f}, saving model...")
+            print(f"\nNew best {eval_metrics}: {best_metric:.4f}, saving model...")
 
             os.makedirs(SAVE_DIR, exist_ok=True)
             model_path = os.path.join(SAVE_DIR, f"{MODEL_NAME}_best.pth")
