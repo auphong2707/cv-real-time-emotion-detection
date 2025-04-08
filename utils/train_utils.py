@@ -2,6 +2,7 @@ import os
 import torch
 from sklearn.metrics import precision_score, recall_score, f1_score
 from tqdm import tqdm
+import wandb
 
 def train_one_epoch(model, dataloader, criterion, optimizer, device):
     model.train()
@@ -132,6 +133,19 @@ def train_model(
         print(f"{' - Precision:':<15} {eval_result['precision']:.4f}")
         print(f"{' - Recall:':<15} {eval_result['recall']:.4f}")
         print(f"{' - F1 Score:':<15} {eval_result['f1_score']:.4f}")
+
+        # --- WandB Logging ---
+        wandb.log({
+            "epoch": epoch + 1,
+            "train/loss": train_result['loss'],
+            "train/learning_rate": train_result['learning_rate'],
+            "train/gradient_norm": train_result['gradient_norm'],
+            "val/loss": eval_result['loss'],
+            "val/accuracy": eval_result['accuracy'],
+            "val/precision": eval_result['precision'],
+            "val/recall": eval_result['recall'],
+            "val/f1_score": eval_result['f1_score']
+        })
 
         # --- Save best model ---
         if eval_result[eval_metrics] > best_metric:

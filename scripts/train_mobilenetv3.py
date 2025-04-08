@@ -5,7 +5,7 @@ import sys
 import torch
 import torch.nn as nn
 import torch.optim as optim
-from tqdm import tqdm  # Import tqdm for progress tracking
+import wandb
 
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 from utils.dataset import *
@@ -43,6 +43,28 @@ def main():
     print(f"   FREEZE: {FREEZE}")
     print(f"   DATA_DIR: {constants.DATA_DIR}")
     print(f"   SAVE_DIR: {constants.SAVE_DIR}")
+
+    # ---------------------------
+    # Initialize WandB
+    # ---------------------------
+     # ---------------------------
+    # 0. Set up API
+    # ---------------------------
+    wandb.login(key=os.environ['WANDB_API_KEY'])
+    wandb.init(
+        project=os.environ['WANDB_PROJECT'],
+        name=constants.EXPERIMENT_NAME_MNV3,
+        config={
+            "model_name": MODEL_NAME,
+            "epochs": EPOCHS,
+            "batch_size": BATCH_SIZE,
+            "image_size": IMAGE_SIZE,
+            "num_workers": NUM_WORKERS,
+            "learning_rate": LR,
+            "pretrained": PRETRAINED,
+            "freeze": FREEZE
+        }
+    )
 
     # ---------------------------
     # 2. Data Loading

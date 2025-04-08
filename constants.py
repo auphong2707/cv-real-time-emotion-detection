@@ -4,6 +4,7 @@
 # MobileNetV3 Constants
 #
 MODEL_NAME_MNV3 = "mobilenetv3"
+EXPERIMENT_NAME_MNV3 = "mobilenetv3-experiment-1"
 EPOCHS_MNV3 = 5
 BATCH_SIZE_MNV3 = 256
 IMAGE_SIZE_MNV3 = 224
