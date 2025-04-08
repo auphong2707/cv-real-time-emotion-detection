@@ -3,6 +3,9 @@ import torch
 from sklearn.metrics import precision_recall_fscore_support, precision_score, recall_score, f1_score
 from tqdm import tqdm
 import wandb
+from sklearn.metrics import confusion_matrix
+import seaborn as sns
+import matplotlib.pyplot as plt
 
 def train_one_epoch(model, dataloader, criterion, optimizer, device):
     model.train()
@@ -43,7 +46,7 @@ def train_one_epoch(model, dataloader, criterion, optimizer, device):
         'gradient_norm': epoch_grad_norm
     }
 
-def validate(model, dataloader, criterion, device):
+def validate(model, dataloader, criterion, device, confusion_matrix_save_path=None):
     model.eval()
     running_loss = 0.0
     correct = 0
@@ -93,6 +96,17 @@ def validate(model, dataloader, criterion, device):
         'recall_per_class': recall_per_class.tolist(),
         'f1_score_per_class': f1_per_class.tolist()
     }
+
+    # Optionally save confusion matrix
+    if confusion_matrix_save_path:
+        cm = confusion_matrix(all_labels, all_preds)
+        plt.figure(figsize=(10, 8))
+        sns.heatmap(cm, annot=True, fmt='d', cmap='Blues')
+        plt.title('Confusion Matrix')
+        plt.xlabel('Predicted')
+        plt.ylabel('True')
+        plt.savefig(confusion_matrix_save_path)
+        plt.close()
 
     return result
 

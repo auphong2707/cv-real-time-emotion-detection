@@ -1,18 +1,21 @@
 # scripts/train_mobilenetv3.py
+import sys
+import os
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+from utils.general_utils import set_seed
+set_seed(42)  # Set a random seed for reproducibility
+
+from utils.dataset import *
+from utils.train_utils import *
+from models.mobilenetv3 import *
 
 import os
-import sys
 import time
 import huggingface_hub
 import torch
 import torch.nn as nn
 import torch.optim as optim
 import wandb
-
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
-from utils.dataset import *
-from utils.train_utils import *
-from models.mobilenetv3 import *
 
 # Import model-specific and shared constants
 import constants
@@ -179,6 +182,17 @@ def main():
     print(f"   F1 Score: {test_results['f1_score']:.4f}")
     print(f"   FPS (Frames/sec): {fps:.2f}")
     print("Training and evaluation completed.")
+
+    # --- Write results to file ---
+    results_file = os.path.join(EXPERIMENT_SAVE_DIR, "results.txt")
+    with open(results_file, "w") as f:
+        f.write("Test Results:\n")
+        f.write(f"   Loss: {test_results['loss']:.4f}\n")
+        f.write(f"   Accuracy: {test_results['accuracy']:.2f}%\n")
+        f.write(f"   Precision: {test_results['precision']:.4f}\n")
+        f.write(f"   Recall: {test_results['recall']:.4f}\n")
+        f.write(f"   F1 Score: {test_results['f1_score']:.4f}\n")
+        f.write(f"   FPS (Frames/sec): {fps:.2f}\n")
     
     # ---------------------------
     # 8. Upload models to Hugging Face
