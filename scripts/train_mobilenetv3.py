@@ -2,6 +2,8 @@
 
 import os
 import sys
+import time
+import huggingface_hub
 import torch
 import torch.nn as nn
 import torch.optim as optim
@@ -31,6 +33,8 @@ def main():
     LR = constants.LR_MNV3
     PRETRAINED = constants.PRETRAINED_MNV3
     FREEZE = constants.FREEZE_MNV3
+    EXPERIMENT_NAME_MNV3 = constants.EXPERIMENT_NAME_MNV3
+    EXPERIMENT_SAVE_DIR = constants.SAVE_DIR + '/' + EXPERIMENT_NAME_MNV3 + '/'
 
     print("Hyperparameters and Constants:")
     print(f"   MODEL_NAME: {MODEL_NAME}")
@@ -42,18 +46,15 @@ def main():
     print(f"   PRETRAINED: {PRETRAINED}")
     print(f"   FREEZE: {FREEZE}")
     print(f"   DATA_DIR: {constants.DATA_DIR}")
-    print(f"   SAVE_DIR: {constants.SAVE_DIR}")
+    print(f"   SAVE_DIR: {EXPERIMENT_SAVE_DIR}")
 
     # ---------------------------
-    # Initialize WandB
-    # ---------------------------
-     # ---------------------------
-    # 0. Set up API
+    # 2. Set up API
     # ---------------------------
     wandb.login(key=os.environ['WANDB_API_KEY'])
     wandb.init(
         project=os.environ['WANDB_PROJECT'],
-        name=constants.EXPERIMENT_NAME_MNV3,
+        name=EXPERIMENT_NAME_MNV3,
         config={
             "model_name": MODEL_NAME,
             "epochs": EPOCHS,
@@ -65,9 +66,10 @@ def main():
             "freeze": FREEZE
         }
     )
+    huggingface_hub.login(token=os.getenv("HUGGINGFACE_TOKEN"))
 
     # ---------------------------
-    # 2. Data Loading
+    # 3. Data Loading
     # ---------------------------
     print("Downloading data...")
     download_data()
@@ -81,7 +83,7 @@ def main():
     )
 
     # ---------------------------
-    # 3. Model Creation
+    # 4. Model Creation
     # ---------------------------
     print("Creating model...")
     model = get_mobilenetv3(
@@ -92,7 +94,7 @@ def main():
     model.to(device)
 
     # ---------------------------
-    # 4. Define Loss & Optimizer
+    # 5. Define Loss & Optimizer
     # ---------------------------
     print("Defining loss and optimizer...")
     criterion = nn.CrossEntropyLoss()
@@ -105,7 +107,7 @@ def main():
         optimizer = optim.Adam(model.parameters(), lr=LR)
 
     # ---------------------------
-    # 5. Training Loop
+    # 6. Training Loop
     # ---------------------------
     train_model(
         model=model,
@@ -118,6 +120,79 @@ def main():
         MODEL_NAME=MODEL_NAME,
         SAVE_DIR=constants.SAVE_DIR
     )
+
+    # ---------------------------
+    # 7. Evaluation
+    # ---------------------------
+    print("Evaluating model on test set...")
+
+    # --- Load the best model ---
+    best_model_path = os.path.join(constants.SAVE_DIR, f"{MODEL_NAME}_best.pth")
+    if os.path.exists(best_model_path):
+        print(f"Loading best model from {best_model_path}...")
+        model.load_state_dict(torch.load(best_model_path))
+    else:
+        raise FileNotFoundError(f"Best model not found at {best_model_path}")
+
+    # --- Set model to evaluation mode ---    
+    model.eval()
+
+    # --- Ensure accurate timing on GPU ---
+    if device.type == 'cuda':
+        torch.cuda.synchronize()
+    start_time = time.time()
+
+    # --- Run evaluation ---
+    test_results = validate(
+        model=model,
+        dataloader=test_loader,
+        criterion=criterion,
+        device=device
+    )
+
+    # --- Stop timing ---
+    if device.type == 'cuda':
+        torch.cuda.synchronize()
+    end_time = time.time()
+
+    # --- Compute FPS ---
+    elapsed_time = end_time - start_time
+    num_samples = len(test_loader.dataset)
+    fps = num_samples / elapsed_time
+
+    # --- Log to WandB ---
+    wandb.log({
+        "test_loss": test_results['loss'],
+        "test_accuracy": test_results['accuracy'],
+        "test_precision": test_results['precision'],
+        "test_recall": test_results['recall'],
+        "test_f1_score": test_results['f1_score'],
+        "test_fps": fps
+    })
+
+    # --- Print Results ---
+    print("Test Results:")
+    print(f"   Loss: {test_results['loss']:.4f}")
+    print(f"   Accuracy: {test_results['accuracy']:.2f}%")
+    print(f"   Precision: {test_results['precision']:.4f}")
+    print(f"   Recall: {test_results['recall']:.4f}")
+    print(f"   F1 Score: {test_results['f1_score']:.4f}")
+    print(f"   FPS (Frames/sec): {fps:.2f}")
+    print("Training and evaluation completed.")
+    
+    # ---------------------------
+    # 8. Upload models to Hugging Face
+    # ---------------------------
+    print("Uploading model to Hugging Face...")
+    api = huggingface_hub.HfApi()
+    api.upload_large_folder(
+        folder_path=EXPERIMENT_SAVE_DIR,
+        repo_id="auphong2707/cv-real-time-emotion-detection",
+        repo_type="model",
+        commit_message="Upload MobileNetV3 model"
+    )
+    print("Model uploaded to Hugging Face.")
+
 
 if __name__ == "__main__":
     main()
