@@ -189,7 +189,7 @@ def main():
         folder_path=EXPERIMENT_SAVE_DIR,
         repo_id="auphong2707/cv-real-time-emotion-detection",
         repo_type="model",
-        commit_message="Upload MobileNetV3 model"
+        private=False
     )
     print("Model uploaded to Hugging Face.")
 
