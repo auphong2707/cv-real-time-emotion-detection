@@ -176,7 +176,7 @@ def train_model(
             eval_result['recall_per_class'],
             eval_result['f1_score_per_class']
         )):
-            print(f"  Class {i}: Precision={p:.4f}, Recall={r:.4f}, F1={f:.4f}")
+            print(f"  Class {ID2LABEL[i]}: Precision={p:.4f}, Recall={r:.4f}, F1={f:.4f}")
 
         # --- WandB Logging ---
         log_data = {

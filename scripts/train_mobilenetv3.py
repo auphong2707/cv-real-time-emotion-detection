@@ -150,7 +150,8 @@ def main():
         model=model,
         dataloader=test_loader,
         criterion=criterion,
-        device=device
+        device=device,
+        confusion_matrix_save_path=os.path.join(EXPERIMENT_SAVE_DIR, "confusion_matrix.png"),
     )
 
     # --- Stop timing ---
