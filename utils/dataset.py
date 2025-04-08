@@ -105,7 +105,7 @@ def get_data_loaders(
     Returns PyTorch DataLoaders for training, validation, and test sets.
     Expects a folder structure like:
       data/train/<class_name>/*.png
-      data/val/<class_name>/*.png
+      data/valid/<class_name>/*.png
       data/test/<class_name>/*.png
     """
 
@@ -151,7 +151,7 @@ def get_data_loaders(
     ])
 
     train_dir = os.path.join(data_dir, "train")
-    val_dir   = os.path.join(data_dir, "val")
+    val_dir   = os.path.join(data_dir, "valid")
     test_dir  = os.path.join(data_dir, "test")
 
     train_dataset = datasets.ImageFolder(train_dir, transform=train_transforms)
