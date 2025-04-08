@@ -85,39 +85,17 @@ def main():
     # ---------------------------
     # 5. Training Loop
     # ---------------------------
-    print("Starting training loop...")
-    best_val_acc = 0.0
-    for epoch in range(EPOCHS):
-        print(f"Epoch [{epoch+1}/{EPOCHS}]")
-        
-        # Training phase
-        train_loss, train_acc = train_one_epoch(
-            model, 
-            tqdm(train_loader, desc="Training"),  # Add tqdm for training progress
-            criterion, 
-            optimizer, 
-            device
-        )
-        
-        # Validation phase
-        val_loss, val_acc = validate(
-            model, 
-            tqdm(val_loader, desc="Validating"),  # Add tqdm for validation progress
-            criterion, 
-            device
-        )
-
-        print(f"   Train Loss: {train_loss:.4f}, Train Acc: {train_acc:.2f}%")
-        print(f"   Val   Loss: {val_loss:.4f},   Val Acc: {val_acc:.2f}%")
-
-        # Save the best model
-        if val_acc > best_val_acc:
-            best_val_acc = val_acc
-            if not os.path.exists(constants.SAVE_DIR):
-                os.makedirs(constants.SAVE_DIR)
-            model_path = os.path.join(constants.SAVE_DIR, f"{MODEL_NAME}_best.pth")
-            torch.save(model.state_dict(), model_path)
-            print(f"   > Saved best model to {model_path}")
+    train_model(
+        model=model,
+        train_loader=train_loader,
+        val_loader=val_loader,
+        criterion=criterion,
+        optimizer=optimizer,
+        device=device,
+        EPOCHS=EPOCHS,
+        MODEL_NAME=MODEL_NAME,
+        SAVE_DIR=constants.SAVE_DIR
+    )
 
 if __name__ == "__main__":
     main()
