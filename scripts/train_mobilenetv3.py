@@ -186,7 +186,7 @@ def main():
     print("Uploading model to Hugging Face...")
     api = huggingface_hub.HfApi()
     api.upload_large_folder(
-        folder_path=EXPERIMENT_SAVE_DIR,
+        folder_path=constants.SAVE_DIR,
         repo_id="auphong2707/cv-real-time-emotion-detection",
         repo_type="model",
         private=False
