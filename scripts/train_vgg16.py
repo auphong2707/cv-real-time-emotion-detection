@@ -55,7 +55,7 @@ def main():
     wandb.login(key=os.environ['WANDB_API_KEY'])
     wandb.init(
         project=os.environ['WANDB_PROJECT'],
-        name=EXPERIMENT_NAME_VGG16,
+        name=EXPERIMENT_NAME,
         config={
             "model_name": MODEL_NAME,
             "epochs": EPOCHS,
