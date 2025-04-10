@@ -35,7 +35,7 @@ def main():
     PRETRAINED = constants.PRETRAINED_VGG16
     FREEZE = constants.FREEZE_VGG16
     EXPERIMENT_NAME = constants.EXPERIMENT_NAME_VGG16
-    EXPERIMENT_SAVE_DIR = constants.SAVE_DIR + '/' + EXPERIMENT_NAME_VGG16 + '/'
+    EXPERIMENT_SAVE_DIR = constants.SAVE_DIR + '/' + EXPERIMENT_NAME + '/'
 
     print("Hyperparameters and Constants:")
     print(f"   MODEL_NAME: {MODEL_NAME}")
