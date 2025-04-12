@@ -9,7 +9,6 @@ from utils.dataset import *
 from utils.train_utils import *
 from models.vgg16 import *
 
-import os
 import time
 import huggingface_hub
 import torch
@@ -90,7 +89,8 @@ def main():
     model = get_vgg16(
         num_classes=num_classes,
         pretrained=PRETRAINED,
-        freeze=FREEZE
+        freeze=FREEZE,
+        unfreeze_last_n_conv_blocks=UNFREEZE_CONV_BLOCKS
     )
     model.to(device)
 
