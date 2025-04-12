@@ -33,6 +33,7 @@ def main():
     LR = constants.LR_VGG16
     PRETRAINED = constants.PRETRAINED_VGG16
     FREEZE = constants.FREEZE_VGG16
+    UNFREEZE_CONV_BLOCKS = constants.UNFREEZE_CONV_BLOCKS
     EXPERIMENT_NAME = constants.EXPERIMENT_NAME_VGG16
     EXPERIMENT_SAVE_DIR = constants.SAVE_DIR + '/' + EXPERIMENT_NAME + '/'
 
