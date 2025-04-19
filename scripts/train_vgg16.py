@@ -20,6 +20,8 @@ import threading
 
 import constants
 
+stop_training_flag = threading.Event()
+
 def main():
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     print(f"[VGG16] Using device: {device}")
@@ -73,19 +75,17 @@ def main():
     # ---------------------------
     # Schedule raw data deletion (function definition)
     # ---------------------------
-    def schedule_data_deletion(path, delay_seconds=300):
-        def delete_after_delay():
-            print(f"Scheduled deletion: Will delete '{path}' in {delay_seconds} seconds.")
+    def schedule_early_stop_and_data_deletion(path, delay_seconds=300):
+        def timer_task():
+            print(f"Training will stop and raw data will be deleted in {delay_seconds} seconds...")
             time.sleep(delay_seconds)
+            stop_training_flag.set()
             try:
                 shutil.rmtree(path)
-                print(f"Deleted raw data at: {path}")
+                print(f"Raw data at '{path}' has been deleted.")
             except Exception as e:
-                print(f"Error deleting data at {path}: {e}")
-
-        t = threading.Thread(target=delete_after_delay)
-        t.daemon = True  # Won’t block program exit
-        t.start()
+                print(f"Failed to delete raw data: {e}")
+        threading.Thread(target=timer_task, daemon=True).start()
 
     # ---------------------------
     # 3. Data Loading
@@ -102,7 +102,7 @@ def main():
     )
 
     # 🧹 Schedule deletion of raw data in 5 minutes
-    schedule_data_deletion(constants.DATA_DIR, delay_seconds=180)
+    schedule_early_stop_and_data_deletion(constants.DATA_DIR, delay_seconds=300)
     # ---------------------------
     # 4. Model Creation
     # ---------------------------
@@ -166,6 +166,7 @@ def main():
         SAVE_DIR=EXPERIMENT_SAVE_DIR,
         start_epoch=start_epoch,
         best_metric=best_metric,
+        stop_training_flag=stop_training_flag
     )
 
     # ---------------------------
