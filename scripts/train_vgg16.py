@@ -117,11 +117,10 @@ def main():
     os.makedirs(EXPERIMENT_SAVE_DIR, exist_ok=True)
 
     def find_latest_checkpoint(checkpoint_dir):
-        checkpoints = [f for f in os.listdir(checkpoint_dir) if f.startswith("checkpoint_epoch_")]
-        if not checkpoints:
-            return None
-        checkpoints.sort(key=lambda x: int(x.split('_')[-1].split('.')[0]), reverse=True)
-        return os.path.join(checkpoint_dir, checkpoints[0])
+        checkpoint_path = os.path.join(checkpoint_dir, "latest_checkpoint.pth")
+        if os.path.exists(checkpoint_path):
+            return checkpoint_path
+        return None
     
     latest_ckpt = find_latest_checkpoint(EXPERIMENT_SAVE_DIR)
     if latest_ckpt:
@@ -156,8 +155,8 @@ def main():
         print("Deleting raw data to save space...")
         shutil.rmtree(constants.DATA_DIR)
         # Delete temporary directory
-        if os.path.exists(".tmp"):
-            shutil.rmtree(".tmp")
+        if os.path.exists("./tmp"):
+            shutil.rmtree("./tmp")
         print("Training stopped before completion due to time limit. Exiting training...")
         return
     
