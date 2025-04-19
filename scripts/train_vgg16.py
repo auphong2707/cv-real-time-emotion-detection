@@ -9,13 +9,14 @@ from utils.dataset import *
 from utils.train_utils import *
 from models.vgg16 import *
 
-import os
 import time
 import huggingface_hub
 import torch
 import torch.nn as nn
 import torch.optim as optim
 import wandb
+import glob
+
 
 import constants
 
@@ -107,8 +108,30 @@ def main():
     else:
         optimizer = optim.Adam(model.parameters(), lr=LR)
 
+    # ----------------------------
+    # 6. Checkpoint Loading
+    # ----------------------------
+    def find_latest_checkpoint(checkpoint_dir):
+        checkpoints = [f for f in os.listdir(checkpoint_dir) if f.startswith("checkpoint_epoch_")]
+        if not checkpoints:
+            return None
+        checkpoints.sort(key=lambda x: int(x.split('_')[-1].split('.')[0]), reverse=True)
+        return os.path.join(checkpoint_dir, checkpoints[0])
+    
+    latest_ckpt = find_latest_checkpoint(EXPERIMENT_SAVE_DIR)
+    if latest_ckpt:
+        print(f"Resuming training from checkpoint: {latest_ckpt}")
+        checkpoint = torch.load(latest_ckpt, map_location=device)
+        model.load_state_dict(checkpoint['model_state_dict'])
+        optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
+        start_epoch = checkpoint['epoch']
+        best_metric = checkpoint.get('best_metric', 0.0)
+    else:
+        start_epoch = 0
+        best_metric = 0.0
+
     # ---------------------------
-    # 6. Training Loop
+    # 7. Training Loop
     # ---------------------------
     train_model(
         model=model,
@@ -120,6 +143,8 @@ def main():
         EPOCHS=EPOCHS,
         MODEL_NAME=MODEL_NAME,
         SAVE_DIR=EXPERIMENT_SAVE_DIR,
+        start_epoch=start_epoch,
+        best_metric=best_metric,
     )
 
     # ---------------------------

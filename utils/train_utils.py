@@ -121,6 +121,10 @@ def validate(model, dataloader, criterion, device, confusion_matrix_save_path=No
 
     return result
 
+def save_checkpoint(state, checkpoint_dir, epoch):
+    filename = os.path.join(checkpoint_dir, f"checkpoint_epoch_{epoch}.pth")
+    torch.save(state, filename)
+
 def train_model(
     model,
     train_loader,
@@ -131,12 +135,14 @@ def train_model(
     EPOCHS,
     MODEL_NAME,
     SAVE_DIR,
-    eval_metrics="f1_score"  # can be: "f1_score", "precision", "recall"
+    eval_metrics="f1_score",  # can be: "f1_score", "precision", "recall"
+    start_epoch=0,
+    best_metric=0.0
 ):
     print("Starting training loop...")
     best_metric = 0.0
 
-    for epoch in range(EPOCHS):
+    for epoch in range(start_epoch, EPOCHS):
         print(f"\nEpoch [{epoch + 1}/{EPOCHS}]")
 
         # --- Training ---
@@ -213,5 +219,14 @@ def train_model(
             torch.save(model.state_dict(), model_path)
 
             print(f"> Saved best model to {model_path}")
+
+        # --- Save checkpoint every epoch ---
+        checkpoint = {
+            'epoch': epoch + 1,
+            'model_state_dict': model.state_dict(),
+            'optimizer_state_dict': optimizer.state_dict(),
+            'best_metric': best_metric,
+        }
+        save_checkpoint(checkpoint, SAVE_DIR, epoch + 1)
 
     print("Training complete.")
