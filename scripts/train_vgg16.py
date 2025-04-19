@@ -15,7 +15,7 @@ import torch
 import torch.nn as nn
 import torch.optim as optim
 import wandb
-import glob
+import shutil
 
 
 import constants
@@ -83,6 +83,13 @@ def main():
         image_size=IMAGE_SIZE,
         num_workers=NUM_WORKERS
     )
+
+    print("Deleting raw data to save space...")
+    try:
+        shutil.rmtree(constants.DATA_DIR)
+        print(f"Deleted data directory: {constants.DATA_DIR}")
+    except Exception as e:
+        print(f"Warning: Could not delete data directory. Reason: {e}")
 
     # ---------------------------
     # 4. Model Creation
