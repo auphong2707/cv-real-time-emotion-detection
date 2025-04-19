@@ -16,7 +16,7 @@ import torch.nn as nn
 import torch.optim as optim
 import wandb
 import shutil
-
+import threading
 
 import constants
 
@@ -71,6 +71,23 @@ def main():
     huggingface_hub.login(token=os.getenv("HUGGINGFACE_TOKEN"))
 
     # ---------------------------
+    # Schedule raw data deletion (function definition)
+    # ---------------------------
+    def schedule_data_deletion(path, delay_seconds=300):
+        def delete_after_delay():
+            print(f"Scheduled deletion: Will delete '{path}' in {delay_seconds} seconds.")
+            time.sleep(delay_seconds)
+            try:
+                shutil.rmtree(path)
+                print(f"Deleted raw data at: {path}")
+            except Exception as e:
+                print(f"Error deleting data at {path}: {e}")
+
+        t = threading.Thread(target=delete_after_delay)
+        t.daemon = True  # Won’t block program exit
+        t.start()
+
+    # ---------------------------
     # 3. Data Loading
     # ---------------------------
     print("Downloading data...")
@@ -84,13 +101,8 @@ def main():
         num_workers=NUM_WORKERS
     )
 
-    print("Deleting raw data to save space...")
-    try:
-        shutil.rmtree(constants.DATA_DIR)
-        print(f"Deleted data directory: {constants.DATA_DIR}")
-    except Exception as e:
-        print(f"Warning: Could not delete data directory. Reason: {e}")
-
+    # 🧹 Schedule deletion of raw data in 5 minutes
+    schedule_data_deletion(constants.DATA_DIR, delay_seconds=180)
     # ---------------------------
     # 4. Model Creation
     # ---------------------------
