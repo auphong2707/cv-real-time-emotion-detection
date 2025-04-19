@@ -122,8 +122,9 @@ def validate(model, dataloader, criterion, device, confusion_matrix_save_path=No
 
     return result
 
-def save_checkpoint(state, checkpoint_dir, epoch):
-    filename = os.path.join(checkpoint_dir, f"checkpoint_epoch_{epoch}.pth")
+def save_checkpoint(state, checkpoint_dir):
+    os.makedirs(checkpoint_dir, exist_ok=True)
+    filename = os.path.join(checkpoint_dir, "latest_checkpoint.pth")
     torch.save(state, filename)
 
 def train_model(
@@ -236,7 +237,7 @@ def train_model(
             'optimizer_state_dict': optimizer.state_dict(),
             'best_metric': best_metric,
         }
-        save_checkpoint(checkpoint, SAVE_DIR, epoch + 1)
+        save_checkpoint(checkpoint, SAVE_DIR)
 
     print("Training complete.")
 

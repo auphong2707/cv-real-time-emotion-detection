@@ -155,6 +155,9 @@ def main():
     if not finished_training:
         print("Deleting raw data to save space...")
         shutil.rmtree(constants.DATA_DIR)
+        # Delete temporary directory
+        if os.path.exists(".tmp"):
+            shutil.rmtree(".tmp")
         print("Training stopped before completion due to time limit. Exiting training...")
         wandb.alert(
             title="Training Stopped",
