@@ -159,11 +159,6 @@ def main():
         if os.path.exists(".tmp"):
             shutil.rmtree(".tmp")
         print("Training stopped before completion due to time limit. Exiting training...")
-        wandb.alert(
-            title="Training Stopped",
-            text="Training stopped before completion due to time limit.",
-            level=wandb.AlertLevel.WARN
-        )
         return
     
     # ---------------------------
