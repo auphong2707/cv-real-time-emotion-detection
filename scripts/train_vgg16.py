@@ -131,6 +131,7 @@ def main():
         start_epoch = checkpoint['epoch']
         best_metric = checkpoint.get('best_metric', 0.0)
     else:
+        print("Train from beginning.")
         start_epoch = 0
         best_metric = 0.0
 
