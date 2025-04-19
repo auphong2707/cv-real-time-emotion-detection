@@ -111,6 +111,8 @@ def main():
     # ----------------------------
     # 6. Checkpoint Loading
     # ----------------------------
+    os.makedirs(EXPERIMENT_SAVE_DIR, exist_ok=True)
+
     def find_latest_checkpoint(checkpoint_dir):
         checkpoints = [f for f in os.listdir(checkpoint_dir) if f.startswith("checkpoint_epoch_")]
         if not checkpoints:
