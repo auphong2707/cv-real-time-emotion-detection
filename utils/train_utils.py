@@ -1,5 +1,6 @@
 import os
 import torch
+import time
 from sklearn.metrics import precision_recall_fscore_support, precision_score, recall_score, f1_score
 from tqdm import tqdm
 import wandb
@@ -18,7 +19,7 @@ ID2LABEL = {
     7: "Surprise"
 }
 
-def train_one_epoch(model, dataloader, criterion, optimizer, device):
+def train_one_epoch(model, dataloader, criterion, optimizer, device, stop_training_flag=None):
     model.train()
     running_loss = 0.0
     total = 0
@@ -27,6 +28,9 @@ def train_one_epoch(model, dataloader, criterion, optimizer, device):
     epoch_grad_norm = 0.0
 
     for step, (images, labels) in enumerate(dataloader, 1):
+        if stop_training_flag is not None and stop_training_flag.is_set():
+            print("⏱️ Early stop signal received during training batch. Exiting epoch early.")
+            break
         images, labels = images.to(device), labels.to(device)
 
         optimizer.zero_grad()
@@ -137,12 +141,27 @@ def train_model(
     SAVE_DIR,
     eval_metrics="f1_score",  # can be: "f1_score", "precision", "recall"
     start_epoch=0,
-    best_metric=0.0
+    best_metric=0.0,
+    stop_training_flag=None
 ):
     print("Starting training loop...")
+
+    # Set the maximum training time (5 minutes in seconds)
+    MAX_TRAINING_TIME = 5 * 60  # 5 minutes
+
+    # Track the start time of training
+    start_time = time.time()
+
     best_metric = 0.0
 
     for epoch in range(start_epoch, EPOCHS):
+        # Check if we've exceeded the training time limit (5 minutes)
+        if time.time() - start_time > MAX_TRAINING_TIME:
+            print("⏰ Max training time reached. Stopping training and shutting down notebook...")
+            if 'KAGGLE_KERNEL_RUN_TYPE' in os.environ:
+                os.system("kill -9 -1")  # This stops the entire Kaggle notebook
+            break
+        
         print(f"\nEpoch [{epoch + 1}/{EPOCHS}]")
 
         # --- Training ---
@@ -151,7 +170,8 @@ def train_model(
             tqdm(train_loader, desc="Training"),
             criterion,
             optimizer,
-            device
+            device,
+            stop_training_flag=stop_training_flag
         )
 
         # --- Validation ---
