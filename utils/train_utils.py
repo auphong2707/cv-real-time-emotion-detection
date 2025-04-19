@@ -19,7 +19,7 @@ ID2LABEL = {
     7: "Surprise"
 }
 
-def train_one_epoch(model, dataloader, criterion, optimizer, device, stop_training_flag=None):
+def train_one_epoch(model, dataloader, criterion, optimizer, device):
     model.train()
     running_loss = 0.0
     total = 0
@@ -28,9 +28,6 @@ def train_one_epoch(model, dataloader, criterion, optimizer, device, stop_traini
     epoch_grad_norm = 0.0
 
     for step, (images, labels) in enumerate(dataloader, 1):
-        if stop_training_flag is not None and stop_training_flag.is_set():
-            print("⏱️ Early stop signal received during training batch. Exiting epoch early.")
-            break
         images, labels = images.to(device), labels.to(device)
 
         optimizer.zero_grad()
@@ -142,13 +139,9 @@ def train_model(
     eval_metrics="f1_score",  # can be: "f1_score", "precision", "recall"
     start_epoch=0,
     best_metric=0.0,
-    stop_training_flag=None
+    training_time_limit=39600,  # 11 hours in seconds
 ):
     print("Starting training loop...")
-
-    # Set the maximum training time (5 minutes in seconds)
-    MAX_TRAINING_TIME = 5 * 60  # 5 minutes
-
     # Track the start time of training
     start_time = time.time()
 
@@ -156,11 +149,8 @@ def train_model(
 
     for epoch in range(start_epoch, EPOCHS):
         # Check if we've exceeded the training time limit (5 minutes)
-        if time.time() - start_time > MAX_TRAINING_TIME:
-            print("⏰ Max training time reached. Stopping training and shutting down notebook...")
-            if 'KAGGLE_KERNEL_RUN_TYPE' in os.environ:
-                os.system("kill -9 -1")  # This stops the entire Kaggle notebook
-            break
+        if time.time() - start_time > training_time_limit:
+            return False
         
         print(f"\nEpoch [{epoch + 1}/{EPOCHS}]")
 
@@ -171,7 +161,6 @@ def train_model(
             criterion,
             optimizer,
             device,
-            stop_training_flag=stop_training_flag
         )
 
         # --- Validation ---
@@ -250,3 +239,5 @@ def train_model(
         save_checkpoint(checkpoint, SAVE_DIR, epoch + 1)
 
     print("Training complete.")
+
+    return True

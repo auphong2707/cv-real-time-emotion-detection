@@ -16,12 +16,13 @@ import torch.nn as nn
 import torch.optim as optim
 import wandb
 import shutil
-import threading
 
 import constants
-
-stop_training_flag = threading.Event()
-
+import argparse
+# Parse command-line arguments
+parser = argparse.ArgumentParser(description="Train VGG16 model for emotion detection.")
+parser.add_argument("--training_time_limit", type=int, default=39600, help="Training time limit in seconds (default: 39600 seconds or 11 hours).")
+args = parser.parse_args()
 def main():
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     print(f"[VGG16] Using device: {device}")
@@ -73,21 +74,6 @@ def main():
     huggingface_hub.login(token=os.getenv("HUGGINGFACE_TOKEN"))
 
     # ---------------------------
-    # Schedule raw data deletion (function definition)
-    # ---------------------------
-    def schedule_early_stop_and_data_deletion(path, delay_seconds=300):
-        def timer_task():
-            print(f"Training will stop and raw data will be deleted in {delay_seconds} seconds...")
-            time.sleep(delay_seconds)
-            stop_training_flag.set()
-            try:
-                shutil.rmtree(path)
-                print(f"Raw data at '{path}' has been deleted.")
-            except Exception as e:
-                print(f"Failed to delete raw data: {e}")
-        threading.Thread(target=timer_task, daemon=True).start()
-
-    # ---------------------------
     # 3. Data Loading
     # ---------------------------
     print("Downloading data...")
@@ -101,8 +87,6 @@ def main():
         num_workers=NUM_WORKERS
     )
 
-    # 🧹 Schedule deletion of raw data in 5 minutes
-    schedule_early_stop_and_data_deletion(constants.DATA_DIR, delay_seconds=300)
     # ---------------------------
     # 4. Model Creation
     # ---------------------------
@@ -154,7 +138,7 @@ def main():
     # ---------------------------
     # 7. Training Loop
     # ---------------------------
-    train_model(
+    finished_training = train_model(
         model=model,
         train_loader=train_loader,
         val_loader=val_loader,
@@ -166,11 +150,21 @@ def main():
         SAVE_DIR=EXPERIMENT_SAVE_DIR,
         start_epoch=start_epoch,
         best_metric=best_metric,
-        stop_training_flag=stop_training_flag
+        training_time_limit=args.training_time_limit,  # 11 hours in seconds
     )
-
+    if not finished_training:
+        print("Deleting raw data to save space...")
+        shutil.rmtree(constants.DATA_DIR)
+        print("Training stopped before completion due to time limit. Exiting training...")
+        wandb.alert(
+            title="Training Stopped",
+            text="Training stopped before completion due to time limit.",
+            level=wandb.AlertLevel.WARN
+        )
+        return
+    
     # ---------------------------
-    # 7. Evaluation
+    # 8. Evaluation
     # ---------------------------
     print("Evaluating model on test set...")
     best_model_path = os.path.join(EXPERIMENT_SAVE_DIR, f"{MODEL_NAME}_best.pth")
