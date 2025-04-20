@@ -152,6 +152,7 @@ def main():
         checkpoint = torch.load(latest_ckpt, map_location=device)
         model.load_state_dict(checkpoint['model_state_dict'])
         optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
+        scheduler.load_state_dict(checkpoint['scheduler_state_dict'])
         start_epoch = checkpoint['epoch']
         best_metric = checkpoint.get('best_metric', 0.0)
     else:

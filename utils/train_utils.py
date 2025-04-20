@@ -242,6 +242,7 @@ def train_model(
             'epoch': epoch + 1,
             'model_state_dict': model.state_dict(),
             'optimizer_state_dict': optimizer.state_dict(),
+            'scheduler_state_dict': scheduler.state_dict(),
             'best_metric': best_metric,
         }
         save_checkpoint(checkpoint, SAVE_DIR)
