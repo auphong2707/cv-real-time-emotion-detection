@@ -141,7 +141,7 @@ def train_model(
     eval_metrics="f1_score",  # can be: "f1_score", "precision", "recall"
     start_epoch=0,
     best_metric=0.0,
-    training_time_limit=39600,  # 11 hours in seconds
+    training_time_limit=41400,
     scheduler=None,
 ):
     print("Starting training loop...")
@@ -151,7 +151,7 @@ def train_model(
     best_metric = 0.0
 
     for epoch in range(start_epoch, EPOCHS):
-        # Check if we've exceeded the training time limit (5 minutes)
+        # Check if the training time limit has been reached
         if time.time() - start_time > training_time_limit:
             return False
         
