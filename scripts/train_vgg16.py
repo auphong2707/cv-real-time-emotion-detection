@@ -19,6 +19,7 @@ import shutil
 
 import constants
 import argparse
+
 # Parse command-line arguments
 parser = argparse.ArgumentParser(description="Train VGG16 model for emotion detection.")
 parser.add_argument("--training_time_limit", type=int, default=39600, help="Training time limit in seconds (default: 39600 seconds or 11 hours).")
@@ -103,7 +104,7 @@ def main():
     model.to(device)
 
     # ---------------------------
-    # 5. Define Loss & Optimizer
+    # 5. Define Loss, Optimizer & Scheduler
     # ---------------------------
     print("Defining loss and optimizer...")
     criterion = nn.CrossEntropyLoss()
@@ -127,9 +128,11 @@ def main():
 
         return torch.optim.lr_scheduler.LambdaLR(optimizer, lr_lambda)
 
-    # Total number of training steps (used for linear decay)
+    # Total number of training steps
     total_steps = EPOCHS * len(train_loader)
-    warmup_steps = int(0.1 * total_steps)
+    
+    # Warmup steps (use if you want to warm up the learning rate)
+    # warmup_steps = int(0.1 * total_steps)
 
     scheduler = get_linear_schedule_with_warmup(
         optimizer, 
@@ -177,7 +180,7 @@ def main():
         SAVE_DIR=EXPERIMENT_SAVE_DIR,
         start_epoch=start_epoch,
         best_metric=best_metric,
-        training_time_limit=args.training_time_limit,  # 11 hours in seconds
+        training_time_limit=args.training_time_limit, 
         scheduler=scheduler,
     )
     if not finished_training:
