@@ -117,7 +117,7 @@ def main():
         optimizer = optim.Adam(model.parameters(), lr=LR, weight_decay=WEIGHT_DECAY)
 
     # Define a Hugging Face-style linear scheduler with warmup
-    def get_linear_schedule_with_warmup(optimizer, num_warmup_steps, num_training_steps):
+    def get_linear_schedule_with_warmup(optimizer, num_training_steps, num_warmup_steps=0):
         def lr_lambda(current_step):
             if current_step < num_warmup_steps:
                 return float(current_step) / float(max(1, num_warmup_steps))
@@ -132,7 +132,9 @@ def main():
     warmup_steps = int(0.1 * total_steps)
 
     scheduler = get_linear_schedule_with_warmup(
-        optimizer, num_warmup_steps=warmup_steps, num_training_steps=total_steps
+        optimizer, 
+        num_training_steps=total_steps 
+        # num_warmup_steps=warmup_steps, 
     )
 
     # ----------------------------
