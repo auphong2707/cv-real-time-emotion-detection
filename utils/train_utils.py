@@ -141,6 +141,7 @@ def train_model(
     start_epoch=0,
     best_metric=0.0,
     training_time_limit=39600,  # 11 hours in seconds
+    scheduler=None,
 ):
     print("Starting training loop...")
     # Track the start time of training
@@ -172,12 +173,11 @@ def train_model(
             device
         )
 
-        # --- Logging ---
-        for name, param in model.named_parameters():
-            if "weight" in name and param.requires_grad:
-                print(f"{name} updated norm: {param.data.norm()}")
-                break
+        # --- Step the scheduler if provided ---
+        if scheduler is not None:
+            scheduler.step()
 
+        # --- Logging ---
         print(f"Epoch {epoch + 1} Summary:\n")
         print("Training Results:")
         print(f"{' - Loss:':<20} {train_result['loss']:.4f}")

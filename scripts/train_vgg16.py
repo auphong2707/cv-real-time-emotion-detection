@@ -23,6 +23,7 @@ import argparse
 parser = argparse.ArgumentParser(description="Train VGG16 model for emotion detection.")
 parser.add_argument("--training_time_limit", type=int, default=39600, help="Training time limit in seconds (default: 39600 seconds or 11 hours).")
 args = parser.parse_args()
+
 def main():
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     print(f"[VGG16] Using device: {device}")
@@ -115,6 +116,9 @@ def main():
     else:
         optimizer = optim.Adam(model.parameters(), lr=LR, weight_decay=WEIGHT_DECAY)
 
+    # Define LR Scheduler
+    scheduler = optim.lr_scheduler.ExponentialLR(optimizer, gamma=0.95)  
+
     # ----------------------------
     # 6. Checkpoint Loading
     # ----------------------------
@@ -155,6 +159,7 @@ def main():
         start_epoch=start_epoch,
         best_metric=best_metric,
         training_time_limit=args.training_time_limit,  # 11 hours in seconds
+        scheduler=scheduler,
     )
     if not finished_training:
         print("Deleting raw data to save space...")
