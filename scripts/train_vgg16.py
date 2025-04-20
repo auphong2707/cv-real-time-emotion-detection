@@ -36,6 +36,7 @@ def main():
     IMAGE_SIZE = constants.IMAGE_SIZE_VGG16
     NUM_WORKERS = constants.NUM_WORKERS_VGG16
     LR = constants.LR_VGG16
+    WEIGHT_DECAY = constants.WEIGHT_DECAY_VGG16
     PRETRAINED = constants.PRETRAINED_VGG16
     FREEZE = constants.FREEZE_VGG16
     EXPERIMENT_NAME = constants.EXPERIMENT_NAME_VGG16
@@ -48,6 +49,7 @@ def main():
     print(f"   IMAGE_SIZE: {IMAGE_SIZE}")
     print(f"   NUM_WORKERS: {NUM_WORKERS}")
     print(f"   LR: {LR}")
+    print(f"   WEIGHT_DECAY: {WEIGHT_DECAY}")
     print(f"   PRETRAINED: {PRETRAINED}")
     print(f"   FREEZE: {FREEZE}")
     print(f"   DATA_DIR: {constants.DATA_DIR}")
@@ -67,6 +69,7 @@ def main():
             "image_size": IMAGE_SIZE,
             "num_workers": NUM_WORKERS,
             "learning_rate": LR,
+            "weight_decay": WEIGHT_DECAY,
             "pretrained": PRETRAINED,
             "freeze": FREEZE
         }
@@ -106,10 +109,11 @@ def main():
     if FREEZE:
         optimizer = optim.Adam(
             filter(lambda p: p.requires_grad, model.parameters()),
-            lr=LR
+            lr=LR,
+            weight_decay=WEIGHT_DECAY,
         )
     else:
-        optimizer = optim.Adam(model.parameters(), lr=LR)
+        optimizer = optim.Adam(model.parameters(), lr=LR, weight_decay=WEIGHT_DECAY)
 
     # ----------------------------
     # 6. Checkpoint Loading
@@ -152,6 +156,10 @@ def main():
         best_metric=best_metric,
         training_time_limit=args.training_time_limit,  # 11 hours in seconds
     )
+    for name, param in model.named_parameters():
+        if "weight" in name and param.requires_grad:
+            print(f"{name} updated norm: {param.data.norm()}")
+            break
     if not finished_training:
         print("Deleting raw data to save space...")
         shutil.rmtree(constants.DATA_DIR)
