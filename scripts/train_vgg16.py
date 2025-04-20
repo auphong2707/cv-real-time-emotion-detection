@@ -116,8 +116,24 @@ def main():
     else:
         optimizer = optim.Adam(model.parameters(), lr=LR, weight_decay=WEIGHT_DECAY)
 
-    # Define LR Scheduler
-    scheduler = optim.lr_scheduler.ExponentialLR(optimizer, gamma=0.95)  
+    # Define a Hugging Face-style linear scheduler with warmup
+    def get_linear_schedule_with_warmup(optimizer, num_warmup_steps, num_training_steps):
+        def lr_lambda(current_step):
+            if current_step < num_warmup_steps:
+                return float(current_step) / float(max(1, num_warmup_steps))
+            return max(
+                0.0, float(num_training_steps - current_step) / float(max(1, num_training_steps - num_warmup_steps))
+            )
+
+        return torch.optim.lr_scheduler.LambdaLR(optimizer, lr_lambda)
+
+    # Total number of training steps (used for linear decay)
+    total_steps = EPOCHS * len(train_loader)
+    warmup_steps = int(0.1 * total_steps)
+
+    scheduler = get_linear_schedule_with_warmup(
+        optimizer, num_warmup_steps=warmup_steps, num_training_steps=total_steps
+    )
 
     # ----------------------------
     # 6. Checkpoint Loading

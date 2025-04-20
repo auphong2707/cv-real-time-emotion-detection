@@ -19,7 +19,7 @@ ID2LABEL = {
     7: "Surprise"
 }
 
-def train_one_epoch(model, dataloader, criterion, optimizer, device):
+def train_one_epoch(model, dataloader, criterion, optimizer, scheduler, device):
     model.train()
     running_loss = 0.0
     total = 0
@@ -44,6 +44,7 @@ def train_one_epoch(model, dataloader, criterion, optimizer, device):
         epoch_grad_norm = total_norm ** 0.5  # from the last batch
 
         optimizer.step()
+        scheduler.step()
 
         # --- Get learning rate for this batch ---
         epoch_lr = optimizer.param_groups[0]['lr']
@@ -162,6 +163,7 @@ def train_model(
             tqdm(train_loader, desc="Training"),
             criterion,
             optimizer,
+            scheduler,
             device,
         )
 
