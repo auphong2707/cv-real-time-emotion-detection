@@ -156,10 +156,6 @@ def main():
         best_metric=best_metric,
         training_time_limit=args.training_time_limit,  # 11 hours in seconds
     )
-    for name, param in model.named_parameters():
-        if "weight" in name and param.requires_grad:
-            print(f"{name} updated norm: {param.data.norm()}")
-            break
     if not finished_training:
         print("Deleting raw data to save space...")
         shutil.rmtree(constants.DATA_DIR)

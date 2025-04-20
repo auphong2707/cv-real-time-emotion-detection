@@ -173,6 +173,11 @@ def train_model(
         )
 
         # --- Logging ---
+        for name, param in model.named_parameters():
+            if "weight" in name and param.requires_grad:
+                print(f"{name} updated norm: {param.data.norm()}")
+                break
+
         print(f"Epoch {epoch + 1} Summary:\n")
         print("Training Results:")
         print(f"{' - Loss:':<20} {train_result['loss']:.4f}")
