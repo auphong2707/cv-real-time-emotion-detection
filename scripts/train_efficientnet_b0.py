@@ -110,15 +110,10 @@ def main():
         lr=LR, weight_decay=WEIGHT_DECAY
     )
 
-    def get_linear_schedule_with_warmup(optimizer, num_training_steps, num_warmup_steps=0):
-        def lr_lambda(current_step):
-            if current_step < num_warmup_steps:
-                return float(current_step) / float(max(1, num_warmup_steps))
-            return max(0.0, float(num_training_steps - current_step) / float(max(1, num_training_steps - num_warmup_steps)))
-        return torch.optim.lr_scheduler.LambdaLR(optimizer, lr_lambda)
 
     total_steps = EPOCHS * len(train_loader)
-    scheduler = get_linear_schedule_with_warmup(optimizer, num_training_steps=total_steps)
+    scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=EPOCHS)
+
 
     # ----------------------------
     # 6. Checkpoint Loading
