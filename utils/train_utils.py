@@ -1,5 +1,6 @@
 import os
 import torch
+import time
 from sklearn.metrics import precision_recall_fscore_support, precision_score, recall_score, f1_score
 from tqdm import tqdm
 import wandb
@@ -18,7 +19,7 @@ ID2LABEL = {
     7: "Surprise"
 }
 
-def train_one_epoch(model, dataloader, criterion, optimizer, device):
+def train_one_epoch(model, dataloader, criterion, optimizer, scheduler, device):
     model.train()
     running_loss = 0.0
     total = 0
@@ -43,6 +44,7 @@ def train_one_epoch(model, dataloader, criterion, optimizer, device):
         epoch_grad_norm = total_norm ** 0.5  # from the last batch
 
         optimizer.step()
+        scheduler.step()
 
         # --- Get learning rate for this batch ---
         epoch_lr = optimizer.param_groups[0]['lr']
@@ -121,6 +123,11 @@ def validate(model, dataloader, criterion, device, confusion_matrix_save_path=No
 
     return result
 
+def save_checkpoint(state, checkpoint_dir):
+    os.makedirs(checkpoint_dir, exist_ok=True)
+    filename = os.path.join(checkpoint_dir, "latest_checkpoint.pth")
+    torch.save(state, filename)
+
 def train_model(
     model,
     train_loader,
@@ -131,12 +138,23 @@ def train_model(
     EPOCHS,
     MODEL_NAME,
     SAVE_DIR,
-    eval_metrics="f1_score"  # can be: "f1_score", "precision", "recall"
+    eval_metrics="f1_score",  # can be: "f1_score", "precision", "recall"
+    start_epoch=0,
+    best_metric=0.0,
+    training_time_limit=41400,
+    scheduler=None,
 ):
     print("Starting training loop...")
+    # Track the start time of training
+    start_time = time.time()
+
     best_metric = 0.0
 
-    for epoch in range(EPOCHS):
+    for epoch in range(start_epoch, EPOCHS):
+        # Check if the training time limit has been reached
+        if time.time() - start_time > training_time_limit:
+            return False
+        
         print(f"\nEpoch [{epoch + 1}/{EPOCHS}]")
 
         # --- Training ---
@@ -145,7 +163,8 @@ def train_model(
             tqdm(train_loader, desc="Training"),
             criterion,
             optimizer,
-            device
+            scheduler,
+            device,
         )
 
         # --- Validation ---
@@ -155,6 +174,10 @@ def train_model(
             criterion,
             device
         )
+
+        # --- Step the scheduler if provided ---
+        if scheduler is not None:
+            scheduler.step()
 
         # --- Logging ---
         print(f"Epoch {epoch + 1} Summary:\n")
@@ -214,4 +237,16 @@ def train_model(
 
             print(f"> Saved best model to {model_path}")
 
+        # --- Save checkpoint every epoch ---
+        checkpoint = {
+            'epoch': epoch + 1,
+            'model_state_dict': model.state_dict(),
+            'optimizer_state_dict': optimizer.state_dict(),
+            'scheduler_state_dict': scheduler.state_dict(),
+            'best_metric': best_metric,
+        }
+        save_checkpoint(checkpoint, SAVE_DIR)
+
     print("Training complete.")
+
+    return True
