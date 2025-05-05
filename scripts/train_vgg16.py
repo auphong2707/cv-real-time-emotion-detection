@@ -41,6 +41,7 @@ def main():
     WEIGHT_DECAY = constants.WEIGHT_DECAY_VGG16
     PRETRAINED = constants.PRETRAINED_VGG16
     FREEZE = constants.FREEZE_VGG16
+    UNFREEZE_CONV_BLOCKS = constants.UNFREEZE_CONV_BLOCKS
     EXPERIMENT_NAME = constants.EXPERIMENT_NAME_VGG16
     EXPERIMENT_SAVE_DIR = constants.SAVE_DIR + '/' + EXPERIMENT_NAME + '/'
 
@@ -99,7 +100,8 @@ def main():
     model = get_vgg16(
         num_classes=num_classes,
         pretrained=PRETRAINED,
-        freeze=FREEZE
+        freeze=FREEZE,
+        unfreeze_last_n_conv_blocks=UNFREEZE_CONV_BLOCKS
     )
     model.to(device)
 
