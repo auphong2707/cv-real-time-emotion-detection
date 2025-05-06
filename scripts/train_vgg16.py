@@ -225,7 +225,27 @@ def main():
 
     elapsed_time = end_time - start_time
     num_samples = len(test_loader.dataset)
-    fps = num_samples / elapsed_time
+    fps_gpu = num_samples / elapsed_time
+
+    # Measure FPS on CPU
+    model.to('cpu')
+    model.eval()
+
+    start_time = time.time()
+    test_results_cpu = validate(
+        model=model,
+        dataloader=test_loader,
+        criterion=criterion,
+        device='cpu',
+        confusion_matrix_save_path=None,  # Skip saving confusion matrix for CPU test
+    )
+    end_time = time.time()
+
+    elapsed_time_cpu = end_time - start_time
+    fps_cpu = num_samples / elapsed_time_cpu
+
+    # Move model back to original device
+    model.to(device)
 
     wandb.log({
         "test_loss": test_results['loss'],
@@ -233,7 +253,8 @@ def main():
         "test_precision": test_results['precision'],
         "test_recall": test_results['recall'],
         "test_f1_score": test_results['f1_score'],
-        "test_fps": fps
+        "test_fps_gpu": fps_gpu,
+        "test_fps_cpu": fps_cpu,
     })
 
     print("Test Results:")
@@ -242,7 +263,8 @@ def main():
     print(f"   Precision: {test_results['precision']:.4f}")
     print(f"   Recall: {test_results['recall']:.4f}")
     print(f"   F1 Score: {test_results['f1_score']:.4f}")
-    print(f"   FPS (Frames/sec): {fps:.2f}")
+    print(f"   FPS GPU (Frames/sec): {fps_gpu:.2f}")
+    print(f"   FPS CPU (Frames/sec): {fps_cpu:.2f}")
     print("Training and evaluation completed.")
 
     results_file = os.path.join(EXPERIMENT_SAVE_DIR, "results.txt")
@@ -253,7 +275,7 @@ def main():
         f.write(f"   Precision: {test_results['precision']:.4f}\n")
         f.write(f"   Recall: {test_results['recall']:.4f}\n")
         f.write(f"   F1 Score: {test_results['f1_score']:.4f}\n")
-        f.write(f"   FPS (Frames/sec): {fps:.2f}\n")
+        f.write(f"   FPS (Frames/sec): {fps_gpu:.2f}\n")
 
     print("Uploading model to Hugging Face...")
     api = huggingface_hub.HfApi()
