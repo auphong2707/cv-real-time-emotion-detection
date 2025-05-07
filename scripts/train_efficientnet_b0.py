@@ -174,6 +174,7 @@ def main():
 
     model.eval()
     if device.type == 'cuda': torch.cuda.synchronize()
+    num_samples = len(test_loader.dataset)
     start_time = time.time()
 
     test_results = validate(
@@ -186,7 +187,27 @@ def main():
 
     if device.type == 'cuda': torch.cuda.synchronize()
     end_time = time.time()
-    fps = len(test_loader.dataset) / (end_time - start_time)
+    fps_gpu = num_samples / (end_time - start_time)
+
+    # Measure FPS on CPU
+    model.to('cpu')
+    model.eval()
+
+    start_time = time.time()
+    test_results_cpu = validate(
+        model=model,
+        dataloader=test_loader,
+        criterion=criterion,
+        device='cpu',
+        confusion_matrix_save_path=None,  # Skip saving confusion matrix for CPU test
+    )
+    end_time = time.time()
+
+    elapsed_time_cpu = end_time - start_time
+    fps_cpu = num_samples / elapsed_time_cpu
+
+    # Move model back to original device
+    model.to(device)
 
     wandb.log({
         "test_loss": test_results['loss'],
@@ -194,24 +215,29 @@ def main():
         "test_precision": test_results['precision'],
         "test_recall": test_results['recall'],
         "test_f1_score": test_results['f1_score'],
-        "test_fps": fps
+        "test_fps_gpu": fps_gpu,
+        "test_fps_cpu": fps_cpu,
     })
 
-    print("Evaluation complete:")
+    print("Test Results:")
     print(f"   Loss: {test_results['loss']:.4f}")
     print(f"   Accuracy: {test_results['accuracy']:.2f}%")
     print(f"   Precision: {test_results['precision']:.4f}")
     print(f"   Recall: {test_results['recall']:.4f}")
     print(f"   F1 Score: {test_results['f1_score']:.4f}")
-    print(f"   FPS: {fps:.2f}")
+    print(f"   FPS GPU (Frames/sec): {fps_gpu:.2f}")
+    print(f"   FPS CPU (Frames/sec): {fps_cpu:.2f}")
+    print("Training and evaluation completed.")
 
     with open(os.path.join(EXPERIMENT_SAVE_DIR, "results.txt"), "w") as f:
-        f.write(f"Loss: {test_results['loss']:.4f}\n")
-        f.write(f"Accuracy: {test_results['accuracy']:.2f}%\n")
-        f.write(f"Precision: {test_results['precision']:.4f}\n")
-        f.write(f"Recall: {test_results['recall']:.4f}\n")
-        f.write(f"F1 Score: {test_results['f1_score']:.4f}\n")
-        f.write(f"FPS: {fps:.2f}\n")
+        f.write("Test Results:\n")
+        f.write(f"   Loss: {test_results['loss']:.4f}\n")
+        f.write(f"   Accuracy: {test_results['accuracy']:.2f}%\n")
+        f.write(f"   Precision: {test_results['precision']:.4f}\n")
+        f.write(f"   Recall: {test_results['recall']:.4f}\n")
+        f.write(f"   F1 Score: {test_results['f1_score']:.4f}\n")
+        f.write(f"   FPS GPU (Frames/sec): {fps_gpu:.2f}\n")
+        f.write(f"   FPS CPU (Frames/sec): {fps_cpu:.2f}\n")
 
     print("Uploading model to Hugging Face...")
     huggingface_hub.HfApi().upload_large_folder(
