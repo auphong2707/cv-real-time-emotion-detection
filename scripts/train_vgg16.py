@@ -275,7 +275,8 @@ def main():
         f.write(f"   Precision: {test_results['precision']:.4f}\n")
         f.write(f"   Recall: {test_results['recall']:.4f}\n")
         f.write(f"   F1 Score: {test_results['f1_score']:.4f}\n")
-        f.write(f"   FPS (Frames/sec): {fps_gpu:.2f}\n")
+        f.write(f"   FPS GPU (Frames/sec): {fps_gpu:.2f}\n")
+        f.write(f"   FPS CPU (Frames/sec): {fps_cpu:.2f}\n")
 
     print("Uploading model to Hugging Face...")
     api = huggingface_hub.HfApi()
