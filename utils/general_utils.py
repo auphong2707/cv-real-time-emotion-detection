@@ -3,7 +3,7 @@ import random
 import time
 import numpy as np
 import torch
-from train_utils import validate
+from utils.train_utils import validate
 
 def set_seed(seed: int):
     """
