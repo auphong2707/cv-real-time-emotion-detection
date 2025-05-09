@@ -92,7 +92,7 @@ def main():
     # 4. Model Creation
     # ---------------------------
     print("Creating model...")
-    model = EmotionCNN(num_classes=num_classes, in_channels=3)
+    model = EmotionCNN(num_classes=num_classes, in_channels=3, image_size=IMAGE_SIZE)
     model.to(device)
 
     # ---------------------------
