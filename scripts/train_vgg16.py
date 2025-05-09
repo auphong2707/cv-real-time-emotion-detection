@@ -2,14 +2,13 @@
 import sys
 import os
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
-from utils.general_utils import set_seed
+from utils.general_utils import set_seed, measure_fps
 set_seed(42)
 
 from utils.dataset import *
 from utils.train_utils import *
 from models.vgg16 import *
 
-import time
 import huggingface_hub
 import torch
 import torch.nn as nn
@@ -207,75 +206,66 @@ def main():
 
     model.eval()
 
-    if device.type == 'cuda':
-        torch.cuda.synchronize()
-    start_time = time.time()
-
-    test_results = validate(
-        model=model,
-        dataloader=test_loader,
-        criterion=criterion,
-        device=device,
-        confusion_matrix_save_path=os.path.join(EXPERIMENT_SAVE_DIR, "confusion_matrix.png"),
-    )
-
-    if device.type == 'cuda':
-        torch.cuda.synchronize()
-    end_time = time.time()
-
-    elapsed_time = end_time - start_time
-    num_samples = len(test_loader.dataset)
-    fps_gpu = num_samples / elapsed_time
+    # Measure FPS on GPU (if available)
+    fps_gpu = None
+    test_results = None
+    if torch.cuda.is_available():
+        fps_gpu, test_results = measure_fps(
+            model=model,
+            test_loader=test_loader,
+            criterion=criterion,
+            device='cuda',
+            experiment_save_dir=EXPERIMENT_SAVE_DIR,
+            save_confusion_matrix=True
+        )
+        print(f"GPU FPS: {fps_gpu:.2f}")
 
     # Measure FPS on CPU
-    model.to('cpu')
-    model.eval()
-
-    start_time = time.time()
-    test_results_cpu = validate(
+    fps_cpu, test_results_cpu = measure_fps(
         model=model,
-        dataloader=test_loader,
+        test_loader=test_loader,
         criterion=criterion,
         device='cpu',
-        confusion_matrix_save_path=None,  # Skip saving confusion matrix for CPU test
+        experiment_save_dir=EXPERIMENT_SAVE_DIR,
+        save_confusion_matrix=False
     )
-    end_time = time.time()
+    print(f"CPU FPS: {fps_cpu:.2f}")
 
-    elapsed_time_cpu = end_time - start_time
-    fps_cpu = num_samples / elapsed_time_cpu
+    # Use GPU test results if available, else CPU results
+    final_test_results = test_results if test_results is not None else test_results_cpu
 
     # Move model back to original device
     model.to(device)
 
     wandb.log({
-        "test_loss": test_results['loss'],
-        "test_accuracy": test_results['accuracy'],
-        "test_precision": test_results['precision'],
-        "test_recall": test_results['recall'],
-        "test_f1_score": test_results['f1_score'],
-        "test_fps_gpu": fps_gpu,
+        "test_loss": final_test_results['loss'],
+        "test_accuracy": final_test_results['accuracy'],
+        "test_precision": final_test_results['precision'],
+        "test_recall": final_test_results['recall'],
+        "test_f1_score": final_test_results['f1_score'],
+        "test_fps_gpu": fps_gpu if fps_gpu is not None else 0.0,
         "test_fps_cpu": fps_cpu,
     })
 
     print("Test Results:")
-    print(f"   Loss: {test_results['loss']:.4f}")
-    print(f"   Accuracy: {test_results['accuracy']:.2f}%")
-    print(f"   Precision: {test_results['precision']:.4f}")
-    print(f"   Recall: {test_results['recall']:.4f}")
-    print(f"   F1 Score: {test_results['f1_score']:.4f}")
-    print(f"   FPS GPU (Frames/sec): {fps_gpu:.2f}")
+    print(f"   Loss: {final_test_results['loss']:.4f}")
+    print(f"   Accuracy: {final_test_results['accuracy']:.2f}%")
+    print(f"   Precision: {final_test_results['precision']:.4f}")
+    print(f"   Recall: {final_test_results['recall']:.4f}")
+    print(f"   F1 Score: {final_test_results['f1_score']:.4f}")
+    print(f"   FPS GPU (Frames/sec): {fps_gpu:.2f}" if fps_gpu is not None else "   FPS GPU: N/A")
     print(f"   FPS CPU (Frames/sec): {fps_cpu:.2f}")
     print("Training and evaluation completed.")
 
     results_file = os.path.join(EXPERIMENT_SAVE_DIR, "results.txt")
     with open(results_file, "w") as f:
         f.write("Test Results:\n")
-        f.write(f"   Loss: {test_results['loss']:.4f}\n")
-        f.write(f"   Accuracy: {test_results['accuracy']:.2f}%\n")
-        f.write(f"   Precision: {test_results['precision']:.4f}\n")
-        f.write(f"   Recall: {test_results['recall']:.4f}\n")
-        f.write(f"   F1 Score: {test_results['f1_score']:.4f}\n")
-        f.write(f"   FPS GPU (Frames/sec): {fps_gpu:.2f}\n")
+        f.write(f"   Loss: {final_test_results['loss']:.4f}\n")
+        f.write(f"   Accuracy: {final_test_results['accuracy']:.2f}%\n")
+        f.write(f"   Precision: {final_test_results['precision']:.4f}\n")
+        f.write(f"   Recall: {final_test_results['recall']:.4f}\n")
+        f.write(f"   F1 Score: {final_test_results['f1_score']:.4f}\n")
+        f.write(f"   FPS GPU (Frames/sec): {fps_gpu:.2f}\n" if fps_gpu is not None else "   FPS GPU: N/A\n")
         f.write(f"   FPS CPU (Frames/sec): {fps_cpu:.2f}\n")
 
     print("Uploading model to Hugging Face...")
