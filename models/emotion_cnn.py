@@ -18,7 +18,7 @@ class SEBlock(nn.Module):
         y = self.sigmoid(self.fc2(y)).view(b, c, 1, 1)
         return x * y
 
-# Mobile Inverted Bottleneck Convolution (EfficientNet)
+# Mobile Inverted Bottleneck Convolution (EfficientNet/MobileNetV3-inspired)
 class MBConvBlock(nn.Module):
     def __init__(self, in_channels, out_channels, expand_ratio=6, kernel_size=3, stride=1):
         super(MBConvBlock, self).__init__()
@@ -37,34 +37,12 @@ class MBConvBlock(nn.Module):
     def forward(self, x):
         identity = x
         out = self.expand(x)
-        out = F.silu(self.bn0(out))
+        out = F.hardswish(self.bn0(out))
         out = self.depthwise(out)
-        out = F.silu(self.bn1(out))
+        out = F.hardswish(self.bn1(out))
         out = self.se(out)
         out = self.project(out)
         out = self.bn2(out)
-        if self.use_residual:
-            out = out + identity
-        return out
-
-# Depthwise Separable Convolution (MobileNetV3)
-class DepthwiseSeparableConv(nn.Module):
-    def __init__(self, in_channels, out_channels, kernel_size=3, stride=1):
-        super(DepthwiseSeparableConv, self).__init__()
-        self.depthwise = nn.Conv2d(in_channels, in_channels, kernel_size, stride=stride, padding=kernel_size//2, groups=in_channels, bias=False)
-        self.bn1 = nn.BatchNorm2d(in_channels)
-        self.pointwise = nn.Conv2d(in_channels, out_channels, 1, bias=False)
-        self.bn2 = nn.BatchNorm2d(out_channels)
-        self.se = SEBlock(out_channels)
-        self.use_residual = (in_channels == out_channels and stride == 1)
-
-    def forward(self, x):
-        identity = x
-        out = self.depthwise(x)
-        out = F.hardswish(self.bn1(out))
-        out = self.pointwise(out)
-        out = self.bn2(out)
-        out = self.se(out)
         if self.use_residual:
             out = out + identity
         return out
@@ -87,7 +65,7 @@ class EmotionCNN(nn.Module):
         self.pool1 = nn.MaxPool2d(kernel_size=2, stride=2)  # image_size -> image_size/2
         self.dropout1 = nn.Dropout(0.05)
 
-        # Block 2: MBConv (EfficientNet-inspired)
+        # Block 2: MBConv
         self.mbconv1 = MBConvBlock(256, 512, expand_ratio=8, kernel_size=5, stride=2)  # image_size/2 -> image_size/4
         self.dropout2 = nn.Dropout(0.05)
 
@@ -99,16 +77,16 @@ class EmotionCNN(nn.Module):
         self.mbconv3 = MBConvBlock(512, 768, expand_ratio=6, kernel_size=3, stride=2)  # image_size/4 -> image_size/8
         self.dropout4 = nn.Dropout(0.05)
 
-        # Block 5: Depthwise Separable Conv (MobileNetV3-inspired)
-        self.dsconv1 = DepthwiseSeparableConv(768, 768, kernel_size=3, stride=1)
+        # Block 5: MBConv (replacing DepthwiseSeparableConv)
+        self.mbconv4 = MBConvBlock(768, 768, expand_ratio=6, kernel_size=3, stride=1)
         self.dropout5 = nn.Dropout(0.05)
 
-        # Block 6: Depthwise Separable Conv
-        self.dsconv2 = DepthwiseSeparableConv(768, 1024, kernel_size=3, stride=2)  # image_size/8 -> image_size/16
+        # Block 6: MBConv (replacing DepthwiseSeparableConv)
+        self.mbconv5 = MBConvBlock(768, 1024, expand_ratio=6, kernel_size=3, stride=2)  # image_size/8 -> image_size/16
         self.dropout6 = nn.Dropout(0.05)
 
-        # Block 7: Depthwise Separable Conv
-        self.dsconv3 = DepthwiseSeparableConv(1024, 1024, kernel_size=3, stride=1)
+        # Block 7: MBConv (replacing DepthwiseSeparableConv)
+        self.mbconv6 = MBConvBlock(1024, 1024, expand_ratio=6, kernel_size=3, stride=1)
         self.dropout7 = nn.Dropout(0.05)
 
         # Global Average Pooling and FC layers
@@ -143,16 +121,16 @@ class EmotionCNN(nn.Module):
         x = self.mbconv3(x)
         x = self.dropout4(x)
 
-        # Block 5: Depthwise Separable
-        x = self.dsconv1(x)
+        # Block 5: MBConv
+        x = self.mbconv4(x)
         x = self.dropout5(x)
 
-        # Block 6: Depthwise Separable
-        x = self.dsconv2(x)
+        # Block 6: MBConv
+        x = self.mbconv5(x)
         x = self.dropout6(x)
 
-        # Block 7: Depthwise Separable
-        x = self.dsconv3(x)
+        # Block 7: MBConv
+        x = self.mbconv6(x)
         x = self.dropout7(x)
 
         # Global pooling and FC layers
