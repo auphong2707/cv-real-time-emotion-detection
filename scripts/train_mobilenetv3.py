@@ -2,24 +2,27 @@
 import sys
 import os
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
-from utils.general_utils import set_seed
-set_seed(42)  # Set a random seed for reproducibility
+from utils.general_utils import set_seed, measure_fps
+set_seed(42)
 
 from utils.dataset import *
 from utils.train_utils import *
 from models.mobilenetv3 import *
 
-import os
-import time
 import huggingface_hub
 import torch
 import torch.nn as nn
 import torch.optim as optim
 import wandb
+import shutil
 
-# Import model-specific and shared constants
 import constants
-import sys
+import argparse
+
+# Parse command-line arguments
+parser = argparse.ArgumentParser(description="Train MobileNetV3 model for emotion detection.")
+parser.add_argument("--training_time_limit", type=int, default=39600, help="Training time limit in seconds (default: 39600 seconds or 11 hours).")
+args = parser.parse_args()
 
 def main():
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -34,10 +37,11 @@ def main():
     IMAGE_SIZE = constants.IMAGE_SIZE_MNV3
     NUM_WORKERS = constants.NUM_WORKERS_MNV3
     LR = constants.LR_MNV3
+    WEIGHT_DECAY = constants.WEIGHT_DECAY_MNV3
     PRETRAINED = constants.PRETRAINED_MNV3
     FREEZE = constants.FREEZE_MNV3
-    EXPERIMENT_NAME_MNV3 = constants.EXPERIMENT_NAME_MNV3
-    EXPERIMENT_SAVE_DIR = constants.SAVE_DIR + '/' + EXPERIMENT_NAME_MNV3 + '/'
+    EXPERIMENT_NAME = constants.EXPERIMENT_NAME_MNV3
+    EXPERIMENT_SAVE_DIR = constants.SAVE_DIR + '/' + EXPERIMENT_NAME + '/'
 
     print("Hyperparameters and Constants:")
     print(f"   MODEL_NAME: {MODEL_NAME}")
@@ -46,6 +50,7 @@ def main():
     print(f"   IMAGE_SIZE: {IMAGE_SIZE}")
     print(f"   NUM_WORKERS: {NUM_WORKERS}")
     print(f"   LR: {LR}")
+    print(f"   WEIGHT_DECAY: {WEIGHT_DECAY}")
     print(f"   PRETRAINED: {PRETRAINED}")
     print(f"   FREEZE: {FREEZE}")
     print(f"   DATA_DIR: {constants.DATA_DIR}")
@@ -57,7 +62,7 @@ def main():
     wandb.login(key=os.environ['WANDB_API_KEY'])
     wandb.init(
         project=os.environ['WANDB_PROJECT'],
-        name=EXPERIMENT_NAME_MNV3,
+        name=EXPERIMENT_NAME,
         config={
             "model_name": MODEL_NAME,
             "epochs": EPOCHS,
@@ -65,6 +70,7 @@ def main():
             "image_size": IMAGE_SIZE,
             "num_workers": NUM_WORKERS,
             "learning_rate": LR,
+            "weight_decay": WEIGHT_DECAY,
             "pretrained": PRETRAINED,
             "freeze": FREEZE
         }
@@ -97,22 +103,48 @@ def main():
     model.to(device)
 
     # ---------------------------
-    # 5. Define Loss & Optimizer
+    # 5. Define Loss, Optimizer & Scheduler
     # ---------------------------
     print("Defining loss and optimizer...")
     criterion = nn.CrossEntropyLoss()
     if FREEZE:
         optimizer = optim.Adam(
             filter(lambda p: p.requires_grad, model.parameters()),
-            lr=LR
+            lr=LR,
+            weight_decay=WEIGHT_DECAY
         )
     else:
-        optimizer = optim.Adam(model.parameters(), lr=LR)
+        optimizer = optim.Adam(model.parameters(), lr=LR, weight_decay=WEIGHT_DECAY)
 
-    # ---------------------------
-    # 6. Training Loop
-    # ---------------------------
-    train_model(
+    def get_linear_schedule_with_warmup(optimizer, num_training_steps, num_warmup_steps=0):
+        def lr_lambda(current_step):
+            if current_step < num_warmup_steps:
+                return float(current_step) / float(max(1, num_warmup_steps))
+            return max(0.0, float(num_training_steps - current_step) / float(max(1, num_training_steps - num_warmup_steps)))
+        return torch.optim.lr_scheduler.LambdaLR(optimizer, lr_lambda)
+
+    total_steps = EPOCHS * len(train_loader)
+    scheduler = get_linear_schedule_with_warmup(optimizer, num_training_steps=total_steps)
+
+    # ----------------------------
+    # 6. Training
+    # ----------------------------
+    os.makedirs(EXPERIMENT_SAVE_DIR, exist_ok=True)
+    latest_ckpt = os.path.join(EXPERIMENT_SAVE_DIR, "latest_checkpoint.pth")
+    if os.path.exists(latest_ckpt):
+        print(f"Resuming from checkpoint: {latest_ckpt}")
+        checkpoint = torch.load(latest_ckpt, map_location=device)
+        model.load_state_dict(checkpoint['model_state_dict'])
+        optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
+        scheduler.load_state_dict(checkpoint['scheduler_state_dict'])
+        start_epoch = checkpoint['epoch']
+        best_metric = checkpoint.get('best_metric', 0.0)
+    else:
+        print("Training from scratch.")
+        start_epoch = 0
+        best_metric = 0.0
+
+    finished_training = train_model(
         model=model,
         train_loader=train_loader,
         val_loader=val_loader,
@@ -122,14 +154,24 @@ def main():
         EPOCHS=EPOCHS,
         MODEL_NAME=MODEL_NAME,
         SAVE_DIR=EXPERIMENT_SAVE_DIR,
+        start_epoch=start_epoch,
+        best_metric=best_metric,
+        training_time_limit=args.training_time_limit,
+        scheduler=scheduler
     )
 
-    # ---------------------------
-    # 7. Evaluation
-    # ---------------------------
-    print("Evaluating model on test set...")
+    if not finished_training:
+        print("Deleting raw data to save space...")
+        shutil.rmtree(constants.DATA_DIR)
+        if os.path.exists("./tmp"):
+            shutil.rmtree("./tmp")
+        print("Training stopped due to time limit.")
+        return
 
-    # --- Load the best model ---
+    # ----------------------------
+    # 7. Evaluation
+    # ----------------------------
+    print("Evaluating model on test set...")
     best_model_path = os.path.join(EXPERIMENT_SAVE_DIR, f"{MODEL_NAME}_best.pth")
     if os.path.exists(best_model_path):
         print(f"Loading best model from {best_model_path}...")
@@ -137,67 +179,64 @@ def main():
     else:
         raise FileNotFoundError(f"Best model not found at {best_model_path}")
 
-    # --- Set model to evaluation mode ---    
     model.eval()
 
-    # --- Ensure accurate timing on GPU ---
-    if device.type == 'cuda':
-        torch.cuda.synchronize()
-    start_time = time.time()
+    fps_gpu = None
+    test_results = None
+    if torch.cuda.is_available():
+        fps_gpu, test_results = measure_fps(
+            model=model,
+            test_loader=test_loader,
+            criterion=criterion,
+            device='cuda',
+            experiment_save_dir=EXPERIMENT_SAVE_DIR,
+            save_confusion_matrix=True
+        )
+        print(f"GPU FPS: {fps_gpu:.2f}")
 
-    # --- Run evaluation ---
-    test_results = validate(
+    fps_cpu, test_results_cpu = measure_fps(
         model=model,
-        dataloader=test_loader,
+        test_loader=test_loader,
         criterion=criterion,
-        device=device,
-        confusion_matrix_save_path=os.path.join(EXPERIMENT_SAVE_DIR, "confusion_matrix.png"),
+        device='cpu',
+        experiment_save_dir=EXPERIMENT_SAVE_DIR,
+        save_confusion_matrix=False
     )
+    print(f"CPU FPS: {fps_cpu:.2f}")
 
-    # --- Stop timing ---
-    if device.type == 'cuda':
-        torch.cuda.synchronize()
-    end_time = time.time()
+    final_test_results = test_results if test_results is not None else test_results_cpu
 
-    # --- Compute FPS ---
-    elapsed_time = end_time - start_time
-    num_samples = len(test_loader.dataset)
-    fps = num_samples / elapsed_time
+    model.to(device)
 
-    # --- Log to WandB ---
     wandb.log({
-        "test_loss": test_results['loss'],
-        "test_accuracy": test_results['accuracy'],
-        "test_precision": test_results['precision'],
-        "test_recall": test_results['recall'],
-        "test_f1_score": test_results['f1_score'],
-        "test_fps": fps
+        "test_loss": final_test_results['loss'],
+        "test_accuracy": final_test_results['accuracy'],
+        "test_precision": final_test_results['precision'],
+        "test_recall": final_test_results['recall'],
+        "test_f1_score": final_test_results['f1_score'],
+        "test_fps_gpu": fps_gpu if fps_gpu is not None else 0.0,
+        "test_fps_cpu": fps_cpu,
     })
 
-    # --- Print Results ---
     print("Test Results:")
-    print(f"   Loss: {test_results['loss']:.4f}")
-    print(f"   Accuracy: {test_results['accuracy']:.2f}%")
-    print(f"   Precision: {test_results['precision']:.4f}")
-    print(f"   Recall: {test_results['recall']:.4f}")
-    print(f"   F1 Score: {test_results['f1_score']:.4f}")
-    print(f"   FPS (Frames/sec): {fps:.2f}")
-    print("Training and evaluation completed.")
+    print(f"   Loss: {final_test_results['loss']:.4f}")
+    print(f"   Accuracy: {final_test_results['accuracy']:.2f}%")
+    print(f"   Precision: {final_test_results['precision']:.4f}")
+    print(f"   Recall: {final_test_results['recall']:.4f}")
+    print(f"   F1 Score: {final_test_results['f1_score']:.4f}")
+    print(f"   FPS GPU (Frames/sec): {fps_gpu:.2f}" if fps_gpu is not None else "   FPS GPU: N/A")
+    print(f"   FPS CPU (Frames/sec): {fps_cpu:.2f}")
 
-    # --- Write results to file ---
-    results_file = os.path.join(EXPERIMENT_SAVE_DIR, "results.txt")
-    with open(results_file, "w") as f:
+    with open(os.path.join(EXPERIMENT_SAVE_DIR, "results.txt"), "w") as f:
         f.write("Test Results:\n")
-        f.write(f"   Loss: {test_results['loss']:.4f}\n")
-        f.write(f"   Accuracy: {test_results['accuracy']:.2f}%\n")
-        f.write(f"   Precision: {test_results['precision']:.4f}\n")
-        f.write(f"   Recall: {test_results['recall']:.4f}\n")
-        f.write(f"   F1 Score: {test_results['f1_score']:.4f}\n")
-        f.write(f"   FPS (Frames/sec): {fps:.2f}\n")
-    
-    # ---------------------------
-    # 8. Upload models to Hugging Face
-    # ---------------------------
+        f.write(f"   Loss: {final_test_results['loss']:.4f}\n")
+        f.write(f"   Accuracy: {final_test_results['accuracy']:.2f}%\n")
+        f.write(f"   Precision: {final_test_results['precision']:.4f}\n")
+        f.write(f"   Recall: {final_test_results['recall']:.4f}\n")
+        f.write(f"   F1 Score: {final_test_results['f1_score']:.4f}\n")
+        f.write(f"   FPS GPU (Frames/sec): {fps_gpu:.2f}\n" if fps_gpu is not None else "   FPS GPU: N/A\n")
+        f.write(f"   FPS CPU (Frames/sec): {fps_cpu:.2f}\n")
+
     print("Uploading model to Hugging Face...")
     api = huggingface_hub.HfApi()
     api.upload_large_folder(
@@ -207,7 +246,6 @@ def main():
         private=False
     )
     print("Model uploaded to Hugging Face.")
-
 
 if __name__ == "__main__":
     main()
