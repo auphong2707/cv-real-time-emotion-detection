@@ -18,9 +18,24 @@ class SEBlock(nn.Module):
         y = self.sigmoid(self.fc2(y)).view(b, c, 1, 1)
         return x * y
 
+# Attention Block
+class AttentionBlock(nn.Module):
+    def __init__(self, in_channels, reduction=8):
+        super(AttentionBlock, self).__init__()
+        self.fc1 = nn.Linear(in_channels, in_channels // reduction, bias=False)
+        self.fc2 = nn.Linear(in_channels // reduction, in_channels, bias=False)
+        self.sigmoid = nn.Sigmoid()
+
+    def forward(self, x):
+        b, c, _, _ = x.size()
+        y = F.adaptive_avg_pool2d(x, 1).view(b, c)
+        y = F.relu(self.fc1(y))
+        y = self.sigmoid(self.fc2(y)).view(b, c, 1, 1)
+        return x * y
+
 # Mobile Inverted Bottleneck Convolution
 class MBConvBlock(nn.Module):
-    def __init__(self, in_channels, out_channels, expand_ratio=6, kernel_size=3, stride=1):
+    def __init__(self, in_channels, out_channels, expand_ratio=6, kernel_size=3, stride=1, use_attention=False):
         super(MBConvBlock, self).__init__()
         hidden_dim = in_channels * expand_ratio
         self.stride = stride
@@ -30,30 +45,30 @@ class MBConvBlock(nn.Module):
         self.bn0 = nn.BatchNorm2d(hidden_dim) if expand_ratio != 1 else nn.Identity()
         self.depthwise = nn.Conv2d(hidden_dim, hidden_dim, kernel_size, stride=stride, padding=kernel_size//2, groups=hidden_dim, bias=False)
         self.bn1 = nn.BatchNorm2d(hidden_dim)
-        self.se = SEBlock(hidden_dim)
+        self.attention = AttentionBlock(hidden_dim) if use_attention else SEBlock(hidden_dim)
         self.project = nn.Conv2d(hidden_dim, out_channels, 1, bias=False)
         self.bn2 = nn.BatchNorm2d(out_channels)
 
     def forward(self, x):
         identity = x
         out = self.expand(x)
-        out = F.hardswish(self.bn0(out))
+        out = F.silu(self.bn0(out))  # Changed to swish
         out = self.depthwise(out)
-        out = F.hardswish(self.bn1(out))
-        out = self.se(out)
+        out = F.silu(self.bn1(out))  # Changed to swish
+        out = self.attention(out)  # SEBlock or AttentionBlock
         out = self.project(out)
         out = self.bn2(out)
         if self.use_residual:
             out = out + identity
         return out
 
-# Enhanced High-Accuracy EmotionCNN
+# Enhanced High-Accuracy EmotionCNN with Attention
 class EmotionCNN(nn.Module):
     def __init__(self, num_classes=7, in_channels=3, image_size=224):
         super(EmotionCNN, self).__init__()
         self.image_size = image_size
 
-        # Block 1: Enhanced VGG-style (three 3x3 convs)
+        # Block 1: VGG-style (three 3x3 convs)
         self.conv1 = nn.Conv2d(in_channels, 64, kernel_size=3, padding=1)
         self.bn1 = nn.BatchNorm2d(64)
         self.conv2 = nn.Conv2d(64, 128, kernel_size=3, padding=1)
@@ -61,37 +76,40 @@ class EmotionCNN(nn.Module):
         self.conv3 = nn.Conv2d(128, 256, kernel_size=3, padding=1)
         self.bn3 = nn.BatchNorm2d(256)
         self.pool1 = nn.MaxPool2d(kernel_size=2, stride=2)  # image_size -> image_size/2
-        self.dropout1 = nn.Dropout(0.1)
+        self.dropout1 = nn.Dropout(0.15)
 
-        # Block 2: MBConv
-        self.mbconv1 = MBConvBlock(256, 256, expand_ratio=6, kernel_size=5, stride=2)  # image_size/2 -> image_size/4
-        self.dropout2 = nn.Dropout(0.1)
+        # Block 2: MBConv (SEBlock)
+        self.mbconv1 = MBConvBlock(256, 256, expand_ratio=6, kernel_size=5, stride=2, use_attention=False)
+        self.dropout2 = nn.Dropout(0.15)
 
-        # Block 3: MBConv (new)
-        self.mbconv2 = MBConvBlock(256, 512, expand_ratio=6, kernel_size=3, stride=2)  # image_size/4 -> image_size/8
-        self.dropout3 = nn.Dropout(0.1)
+        # Block 3: MBConv (SEBlock)
+        self.mbconv2 = MBConvBlock(256, 512, expand_ratio=6, kernel_size=3, stride=2, use_attention=False)
+        self.dropout3 = nn.Dropout(0.15)
 
-        # Block 4: MBConv
-        self.mbconv3 = MBConvBlock(512, 512, expand_ratio=6, kernel_size=3, stride=1)
-        self.dropout4 = nn.Dropout(0.1)
+        # Block 4: MBConv (AttentionBlock)
+        self.mbconv3 = MBConvBlock(512, 512, expand_ratio=6, kernel_size=3, stride=1, use_attention=True)
+        self.dropout4 = nn.Dropout(0.15)
 
-        # Block 5: MBConv
-        self.mbconv4 = MBConvBlock(512, 768, expand_ratio=6, kernel_size=3, stride=2)  # image_size/8 -> image_size/16
-        self.dropout5 = nn.Dropout(0.1)
+        # Block 5: MBConv (AttentionBlock)
+        self.mbconv4 = MBConvBlock(512, 768, expand_ratio=6, kernel_size=3, stride=2, use_attention=True)
+        self.dropout5 = nn.Dropout(0.15)
 
-        # Block 6: MBConv (new)
-        self.mbconv5 = MBConvBlock(768, 1024, expand_ratio=6, kernel_size=3, stride=1)
-        self.dropout6 = nn.Dropout(0.1)
+        # Block 6: MBConv (AttentionBlock)
+        self.mbconv5 = MBConvBlock(768, 1024, expand_ratio=6, kernel_size=3, stride=1, use_attention=True)
+        self.dropout6 = nn.Dropout(0.15)
+
+        # Final Attention Block
+        self.final_attention = AttentionBlock(1024, reduction=8)
 
         # Global Average Pooling and FC layers
         self.global_pool = nn.AdaptiveAvgPool2d(1)
         self.flatten = nn.Flatten()
         self.fc1 = nn.Linear(1024, 1024)  # First FC layer
         self.bn_fc1 = nn.BatchNorm1d(1024)
-        self.dropout7 = nn.Dropout(0.2)
+        self.dropout7 = nn.Dropout(0.15)
         self.fc2 = nn.Linear(1024, 512)  # Second FC layer
         self.bn_fc2 = nn.BatchNorm1d(512)
-        self.dropout8 = nn.Dropout(0.2)
+        self.dropout8 = nn.Dropout(0.15)
         self.fc3 = nn.Linear(512, num_classes)
 
     def forward(self, x):
@@ -121,6 +139,9 @@ class EmotionCNN(nn.Module):
         # Block 6: MBConv
         x = self.mbconv5(x)
         x = self.dropout6(x)
+
+        # Final Attention Block
+        x = self.final_attention(x)
 
         # Global pooling and FC layers
         x = self.global_pool(x)
