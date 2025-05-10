@@ -1,7 +1,7 @@
 import torch.nn as nn
 from torchvision.models import vgg16, VGG16_Weights
 
-def get_vgg16(num_classes=7, pretrained=True, freeze=False, unfreeze_last_n_conv_blocks=0):
+def get_vgg16(num_classes=8, pretrained=True, freeze=False, unfreeze_last_n_conv_blocks=0):
     """
     Returns a VGG16 model with a custom classifier and optional freezing.
 

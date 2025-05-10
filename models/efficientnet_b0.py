@@ -1,7 +1,7 @@
 import torch.nn as nn
 from torchvision.models import efficientnet_b0, EfficientNet_B0_Weights
 
-def get_efficientnet_b0(num_classes=7, pretrained=True, freeze=False):
+def get_efficientnet_b0(num_classes=8, pretrained=True, freeze=False):
     """
     Returns an EfficientNet-B0 model with a custom classifier and optional freezing.
 
