@@ -20,7 +20,7 @@ class SEBlock(nn.Module):
 
 # Mobile Inverted Bottleneck Convolution
 class MBConvBlock(nn.Module):
-    def __init__(self, in_channels, out_channels, expand_ratio=4, kernel_size=3, stride=1):
+    def __init__(self, in_channels, out_channels, expand_ratio=6, kernel_size=3, stride=1):
         super(MBConvBlock, self).__init__()
         hidden_dim = in_channels * expand_ratio
         self.stride = stride
@@ -47,44 +47,58 @@ class MBConvBlock(nn.Module):
             out = out + identity
         return out
 
-# Simplified High-Accuracy EmotionCNN
+# Enhanced High-Accuracy EmotionCNN
 class EmotionCNN(nn.Module):
     def __init__(self, num_classes=7, in_channels=3, image_size=224):
         super(EmotionCNN, self).__init__()
         self.image_size = image_size
 
-        # Block 1: Simplified VGG-style (two 3x3 convs)
+        # Block 1: Enhanced VGG-style (three 3x3 convs)
         self.conv1 = nn.Conv2d(in_channels, 64, kernel_size=3, padding=1)
         self.bn1 = nn.BatchNorm2d(64)
         self.conv2 = nn.Conv2d(64, 128, kernel_size=3, padding=1)
         self.bn2 = nn.BatchNorm2d(128)
+        self.conv3 = nn.Conv2d(128, 256, kernel_size=3, padding=1)
+        self.bn3 = nn.BatchNorm2d(256)
         self.pool1 = nn.MaxPool2d(kernel_size=2, stride=2)  # image_size -> image_size/2
-        self.dropout1 = nn.Dropout(0.05)
+        self.dropout1 = nn.Dropout(0.1)
 
         # Block 2: MBConv
-        self.mbconv1 = MBConvBlock(128, 256, expand_ratio=4, kernel_size=5, stride=2)  # image_size/2 -> image_size/4
-        self.dropout2 = nn.Dropout(0.05)
+        self.mbconv1 = MBConvBlock(256, 256, expand_ratio=6, kernel_size=5, stride=2)  # image_size/2 -> image_size/4
+        self.dropout2 = nn.Dropout(0.1)
 
-        # Block 3: MBConv
-        self.mbconv2 = MBConvBlock(256, 512, expand_ratio=4, kernel_size=3, stride=2)  # image_size/4 -> image_size/8
-        self.dropout3 = nn.Dropout(0.05)
+        # Block 3: MBConv (new)
+        self.mbconv2 = MBConvBlock(256, 512, expand_ratio=6, kernel_size=3, stride=2)  # image_size/4 -> image_size/8
+        self.dropout3 = nn.Dropout(0.1)
 
         # Block 4: MBConv
-        self.mbconv3 = MBConvBlock(512, 768, expand_ratio=4, kernel_size=3, stride=2)  # image_size/8 -> image_size/16
-        self.dropout4 = nn.Dropout(0.05)
+        self.mbconv3 = MBConvBlock(512, 512, expand_ratio=6, kernel_size=3, stride=1)
+        self.dropout4 = nn.Dropout(0.1)
+
+        # Block 5: MBConv
+        self.mbconv4 = MBConvBlock(512, 768, expand_ratio=6, kernel_size=3, stride=2)  # image_size/8 -> image_size/16
+        self.dropout5 = nn.Dropout(0.1)
+
+        # Block 6: MBConv (new)
+        self.mbconv5 = MBConvBlock(768, 1024, expand_ratio=6, kernel_size=3, stride=1)
+        self.dropout6 = nn.Dropout(0.1)
 
         # Global Average Pooling and FC layers
         self.global_pool = nn.AdaptiveAvgPool2d(1)
         self.flatten = nn.Flatten()
-        self.fc1 = nn.Linear(768, 512)  # Simplified FC layer
-        self.bn_fc1 = nn.BatchNorm1d(512)
-        self.dropout5 = nn.Dropout(0.2)
-        self.fc2 = nn.Linear(512, num_classes)
+        self.fc1 = nn.Linear(1024, 1024)  # First FC layer
+        self.bn_fc1 = nn.BatchNorm1d(1024)
+        self.dropout7 = nn.Dropout(0.2)
+        self.fc2 = nn.Linear(1024, 512)  # Second FC layer
+        self.bn_fc2 = nn.BatchNorm1d(512)
+        self.dropout8 = nn.Dropout(0.2)
+        self.fc3 = nn.Linear(512, num_classes)
 
     def forward(self, x):
         # Block 1: VGG-style
         x = F.relu(self.bn1(self.conv1(x)))
         x = F.relu(self.bn2(self.conv2(x)))
+        x = F.relu(self.bn3(self.conv3(x)))
         x = self.pool1(x)
         x = self.dropout1(x)
 
@@ -100,12 +114,22 @@ class EmotionCNN(nn.Module):
         x = self.mbconv3(x)
         x = self.dropout4(x)
 
+        # Block 5: MBConv
+        x = self.mbconv4(x)
+        x = self.dropout5(x)
+
+        # Block 6: MBConv
+        x = self.mbconv5(x)
+        x = self.dropout6(x)
+
         # Global pooling and FC layers
         x = self.global_pool(x)
         x = self.flatten(x)
         x = F.relu(self.bn_fc1(self.fc1(x)))
-        x = self.dropout5(x)
-        x = self.fc2(x)
+        x = self.dropout7(x)
+        x = F.relu(self.bn_fc2(self.fc2(x)))
+        x = self.dropout8(x)
+        x = self.fc3(x)
         return x
 
 # Example usage
