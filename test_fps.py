@@ -68,3 +68,13 @@ def main():
 
 if __name__ == "__main__":
     main()
+
+
+# EfficientNet-B0
+## python test_fps.py --model_type efficientnet_b0 --model_path deploy_models/efficientnet_b0_best.pth
+
+# MobileNetV3
+## python test_fps.py --model_type mobilenetv3 --model_path deploy_models/mobilenetv3_best.pth
+
+# VGG16
+## python test_fps.py --model_type vgg16 --model_path deploy_models/vgg16_best.pth
