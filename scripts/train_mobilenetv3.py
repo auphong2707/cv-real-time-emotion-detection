@@ -1,4 +1,3 @@
-# scripts/train_mobilenetv3.py
 import sys
 import os
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
@@ -15,6 +14,9 @@ import torch.nn as nn
 import torch.optim as optim
 import wandb
 import shutil
+from sklearn.metrics import f1_score
+from torch.utils.data import WeightedRandomSampler
+import torchvision.transforms as transforms
 
 import constants
 import argparse
@@ -32,6 +34,7 @@ def main():
     # 1. Hyperparameters
     # ---------------------------
     MODEL_NAME = constants.MODEL_NAME_MNV3
+    EXPERIMENT_NAME = constants.EXPERIMENT_NAME_MNV3
     EPOCHS = constants.EPOCHS_MNV3
     BATCH_SIZE = constants.BATCH_SIZE_MNV3
     IMAGE_SIZE = constants.IMAGE_SIZE_MNV3
@@ -40,11 +43,11 @@ def main():
     WEIGHT_DECAY = constants.WEIGHT_DECAY_MNV3
     PRETRAINED = constants.PRETRAINED_MNV3
     FREEZE = constants.FREEZE_MNV3
-    EXPERIMENT_NAME = constants.EXPERIMENT_NAME_MNV3
     EXPERIMENT_SAVE_DIR = constants.SAVE_DIR + '/' + EXPERIMENT_NAME + '/'
 
     print("Hyperparameters and Constants:")
     print(f"   MODEL_NAME: {MODEL_NAME}")
+    print(f"   EXPERIMENT_NAME: {EXPERIMENT_NAME}")
     print(f"   EPOCHS: {EPOCHS}")
     print(f"   BATCH_SIZE: {BATCH_SIZE}")
     print(f"   IMAGE_SIZE: {IMAGE_SIZE}")
@@ -78,16 +81,48 @@ def main():
     huggingface_hub.login(token=os.getenv("HUGGINGFACE_TOKEN"))
 
     # ---------------------------
-    # 3. Data Loading
+    # 3. Data Loading with Augmentation
     # ---------------------------
     print("Downloading data...")
     download_data()
 
     print("Creating data loaders...")
+    # Add augmentation to training data
+    train_transforms = transforms.Compose([
+        transforms.Resize((IMAGE_SIZE, IMAGE_SIZE)),
+        transforms.RandomHorizontalFlip(),
+        transforms.RandomRotation(15),
+        transforms.ColorJitter(brightness=0.2, contrast=0.2, saturation=0.2),
+        transforms.RandomAffine(degrees=0, translate=(0.1, 0.1)),
+        transforms.ToTensor(),
+        transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
+    ])
+    val_transforms = transforms.Compose([
+        transforms.Resize((IMAGE_SIZE, IMAGE_SIZE)),
+        transforms.ToTensor(),
+        transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
+    ])
+
+    # Update get_data_loaders to use these transforms
     train_loader, val_loader, test_loader, num_classes = get_data_loaders(
         data_dir=constants.DATA_DIR,
         batch_size=BATCH_SIZE,
         image_size=IMAGE_SIZE,
+        num_workers=NUM_WORKERS,
+        train_transforms=train_transforms,
+        val_transforms=val_transforms
+    )
+
+    # Weighted sampling for class imbalance
+    class_counts = torch.bincount(torch.tensor(train_loader.dataset.labels))
+    total = sum(class_counts)
+    class_weights = total / (len(class_counts) * class_counts.float())
+    sample_weights = [class_weights[label] for label in train_loader.dataset.labels]
+    sampler = WeightedRandomSampler(sample_weights, len(sample_weights))
+    train_loader = torch.utils.data.DataLoader(
+        train_loader.dataset,
+        batch_size=BATCH_SIZE,
+        sampler=sampler,
         num_workers=NUM_WORKERS
     )
 
@@ -100,35 +135,45 @@ def main():
         pretrained=PRETRAINED,
         freeze=FREEZE
     )
+
+    # Unfreeze later blocks since FREEZE=True
+    if FREEZE:
+        for param in model.parameters():
+            param.requires_grad = False
+        # Unfreeze last few blocks (adjust indices based on MobileNetV3 structure)
+        for name, param in model.named_parameters():
+            if "features.9" in name or "features.10" in name or "features.11" in name:
+                param.requires_grad = True
+        for param in model.classifier.parameters():
+            param.requires_grad = True
+
+    # Add dropout to classifier
+    model.classifier = nn.Sequential(
+        nn.Dropout(0.3),
+        nn.Linear(model.classifier[0].in_features, num_classes)
+    )
     model.to(device)
 
     # ---------------------------
     # 5. Define Loss, Optimizer & Scheduler
     # ---------------------------
     print("Defining loss and optimizer...")
-    criterion = nn.CrossEntropyLoss()
-    if FREEZE:
-        optimizer = optim.Adam(
-            filter(lambda p: p.requires_grad, model.parameters()),
-            lr=LR,
-            weight_decay=WEIGHT_DECAY
-        )
-    else:
-        optimizer = optim.Adam(model.parameters(), lr=LR, weight_decay=WEIGHT_DECAY)
+    # Use class weights in loss with label smoothing
+    criterion = nn.CrossEntropyLoss(weight=class_weights.to(device), label_smoothing=0.1)
 
-    def get_linear_schedule_with_warmup(optimizer, num_training_steps, num_warmup_steps=0):
-        def lr_lambda(current_step):
-            if current_step < num_warmup_steps:
-                return float(current_step) / float(max(1, num_warmup_steps))
-            return max(0.0, float(num_training_steps - current_step) / float(max(1, num_training_steps - num_warmup_steps)))
-        return torch.optim.lr_scheduler.LambdaLR(optimizer, lr_lambda)
+    # Optimizer for frozen layers
+    optimizer = optim.Adam(
+        filter(lambda p: p.requires_grad, model.parameters()),
+        lr=LR,
+        weight_decay=WEIGHT_DECAY
+    )
 
-    total_steps = EPOCHS * len(train_loader)
-    scheduler = get_linear_schedule_with_warmup(optimizer, num_training_steps=total_steps)
+    # Use CosineAnnealingWarmRestarts scheduler
+    scheduler = torch.optim.lr_scheduler.CosineAnnealingWarmRestarts(optimizer, T_0=10, T_mult=2, eta_min=1e-6)
 
-    # ----------------------------
-    # 6. Training
-    # ----------------------------
+    # ---------------------------
+    # 6. Training with Early Stopping
+    # ---------------------------
     os.makedirs(EXPERIMENT_SAVE_DIR, exist_ok=True)
     latest_ckpt = os.path.join(EXPERIMENT_SAVE_DIR, "latest_checkpoint.pth")
     if os.path.exists(latest_ckpt):
@@ -144,33 +189,63 @@ def main():
         start_epoch = 0
         best_metric = 0.0
 
-    finished_training = train_model(
-        model=model,
-        train_loader=train_loader,
-        val_loader=val_loader,
-        criterion=criterion,
-        optimizer=optimizer,
-        device=device,
-        EPOCHS=EPOCHS,
-        MODEL_NAME=MODEL_NAME,
-        SAVE_DIR=EXPERIMENT_SAVE_DIR,
-        start_epoch=start_epoch,
-        best_metric=best_metric,
-        training_time_limit=args.training_time_limit,
-        scheduler=scheduler
-    )
+    best_f1 = best_metric
+    patience = 10
+    counter = 0
 
-    if not finished_training:
-        print("Deleting raw data to save space...")
-        shutil.rmtree(constants.DATA_DIR)
-        if os.path.exists("./tmp"):
-            shutil.rmtree("./tmp")
-        print("Training stopped due to time limit.")
-        return
+    for epoch in range(start_epoch, EPOCHS):
+        model.train()
+        for inputs, labels in train_loader:
+            inputs, labels = inputs.to(device), labels.to(device)
+            outputs = model(inputs)
+            loss = criterion(outputs, labels)
+            optimizer.zero_grad()
+            loss.backward()
+            optimizer.step()
+            scheduler.step()
 
-    # ----------------------------
+        # Validation
+        model.eval()
+        val_preds, val_labels = [], []
+        with torch.no_grad():
+            for inputs, labels in val_loader:
+                inputs, labels = inputs.to(device), labels.to(device)
+                outputs = model(inputs)
+                _, preds = torch.max(outputs, 1)
+                val_preds.extend(preds.cpu().numpy())
+                val_labels.extend(labels.cpu().numpy())
+
+        val_f1 = f1_score(val_labels, val_preds, average='macro')
+        val_f1_per_class = f1_score(val_labels, val_preds, average=None, labels=range(num_classes))
+        wandb.log({
+            "val_f1": val_f1,
+            "val_f1_per_class": val_f1_per_class,
+            "epoch": epoch
+        })
+
+        # Early stopping
+        if val_f1 > best_f1:
+            best_f1 = val_f1
+            counter = 0
+            torch.save(model.state_dict(), os.path.join(EXPERIMENT_SAVE_DIR, f"{MODEL_NAME}_best.pth"))
+        else:
+            counter += 1
+            if counter >= patience:
+                print(f"Early stopping at epoch {epoch}")
+                break
+
+        # Save checkpoint
+        torch.save({
+            'epoch': epoch + 1,
+            'model_state_dict': model.state_dict(),
+            'optimizer_state_dict': optimizer.state_dict(),
+            'scheduler_state_dict': scheduler.state_dict(),
+            'best_metric': best_f1
+        }, latest_ckpt)
+
+    # ---------------------------
     # 7. Evaluation
-    # ----------------------------
+    # ---------------------------
     print("Evaluating model on test set...")
     best_model_path = os.path.join(EXPERIMENT_SAVE_DIR, f"{MODEL_NAME}_best.pth")
     if os.path.exists(best_model_path):
