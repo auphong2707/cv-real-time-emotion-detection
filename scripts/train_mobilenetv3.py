@@ -14,7 +14,6 @@ import torch.nn as nn
 import torch.optim as optim
 import wandb
 import shutil
-from sklearn.metrics import f1_score
 from torch.utils.data import WeightedRandomSampler
 
 import constants
@@ -33,7 +32,6 @@ def main():
     # 1. Hyperparameters
     # ---------------------------
     MODEL_NAME = constants.MODEL_NAME_MNV3
-    EXPERIMENT_NAME = constants.EXPERIMENT_NAME_MNV3
     EPOCHS = constants.EPOCHS_MNV3
     BATCH_SIZE = constants.BATCH_SIZE_MNV3
     IMAGE_SIZE = constants.IMAGE_SIZE_MNV3
@@ -42,11 +40,11 @@ def main():
     WEIGHT_DECAY = constants.WEIGHT_DECAY_MNV3
     PRETRAINED = constants.PRETRAINED_MNV3
     FREEZE = constants.FREEZE_MNV3
+    EXPERIMENT_NAME = constants.EXPERIMENT_NAME_MNV3
     EXPERIMENT_SAVE_DIR = constants.SAVE_DIR + '/' + EXPERIMENT_NAME + '/'
 
     print("Hyperparameters and Constants:")
     print(f"   MODEL_NAME: {MODEL_NAME}")
-    print(f"   EXPERIMENT_NAME: {EXPERIMENT_NAME}")
     print(f"   EPOCHS: {EPOCHS}")
     print(f"   BATCH_SIZE: {BATCH_SIZE}")
     print(f"   IMAGE_SIZE: {IMAGE_SIZE}")
@@ -86,7 +84,6 @@ def main():
     download_data()
 
     print("Creating data loaders...")
-    # Use the original call to get_data_loaders without passing transforms
     train_loader, val_loader, test_loader, num_classes = get_data_loaders(
         data_dir=constants.DATA_DIR,
         batch_size=BATCH_SIZE,
@@ -95,7 +92,6 @@ def main():
     )
 
     # Weighted sampling for class imbalance
-    # Use 'targets' since ImageFolder is used in get_data_loaders
     labels = train_loader.dataset.targets
     class_counts = torch.bincount(torch.tensor(labels))
     total = sum(class_counts)
@@ -121,12 +117,11 @@ def main():
 
     # Unfreeze later blocks since FREEZE=True
     if FREEZE:
-        for param in model.parameters():
-            param.requires_grad = False
-        # Unfreeze last few blocks (adjust indices based on MobileNetV3 structure)
+        # Unfreeze features.9 and features.10
         for name, param in model.named_parameters():
             if "features.9" in name or "features.10" in name:
                 param.requires_grad = True
+        # Ensure classifier is trainable
         for param in model.classifier.parameters():
             param.requires_grad = True
 
@@ -141,22 +136,22 @@ def main():
     # 5. Define Loss, Optimizer & Scheduler
     # ---------------------------
     print("Defining loss and optimizer...")
-    # Use class weights in loss with label smoothing
     criterion = nn.CrossEntropyLoss(weight=class_weights.to(device), label_smoothing=0.1)
-
-    # Optimizer for frozen layers
-    optimizer = optim.Adam(
-        filter(lambda p: p.requires_grad, model.parameters()),
-        lr=LR,
-        weight_decay=WEIGHT_DECAY
-    )
+    if FREEZE:
+        optimizer = optim.Adam(
+            filter(lambda p: p.requires_grad, model.parameters()),
+            lr=LR,
+            weight_decay=WEIGHT_DECAY
+        )
+    else:
+        optimizer = optim.Adam(model.parameters(), lr=LR, weight_decay=WEIGHT_DECAY)
 
     # Use CosineAnnealingWarmRestarts scheduler
     scheduler = torch.optim.lr_scheduler.CosineAnnealingWarmRestarts(optimizer, T_0=10, T_mult=2, eta_min=1e-6)
 
-    # ---------------------------
-    # 6. Training with Early Stopping
-    # ---------------------------
+    # ----------------------------
+    # 6. Training
+    # ----------------------------
     os.makedirs(EXPERIMENT_SAVE_DIR, exist_ok=True)
     latest_ckpt = os.path.join(EXPERIMENT_SAVE_DIR, "latest_checkpoint.pth")
     if os.path.exists(latest_ckpt):
@@ -172,84 +167,33 @@ def main():
         start_epoch = 0
         best_metric = 0.0
 
-    best_f1 = best_metric
-    patience = 10
-    counter = 0
+    finished_training = train_model(
+        model=model,
+        train_loader=train_loader,
+        val_loader=val_loader,
+        criterion=criterion,
+        optimizer=optimizer,
+        device=device,
+        EPOCHS=EPOCHS,
+        MODEL_NAME=MODEL_NAME,
+        SAVE_DIR=EXPERIMENT_SAVE_DIR,
+        start_epoch=start_epoch,
+        best_metric=best_metric,
+        training_time_limit=args.training_time_limit,
+        scheduler=scheduler
+    )
 
-    for epoch in range(start_epoch, EPOCHS):
-        model.train()
-        epoch_loss = 0.0
-        num_batches = 0
-        for inputs, labels in train_loader:
-            inputs, labels = inputs.to(device), labels.to(device)
-            outputs = model(inputs)
-            loss = criterion(outputs, labels)
-            optimizer.zero_grad()
-            loss.backward()
+    if not finished_training:
+        print("Deleting raw data to save space...")
+        shutil.rmtree(constants.DATA_DIR)
+        if os.path.exists("./tmp"):
+            shutil.rmtree("./tmp")
+        print("Training stopped due to time limit.")
+        return
 
-            # Compute gradient norm
-            grad_norm = 0.0
-            for p in model.parameters():
-                if p.grad is not None:
-                    grad_norm += p.grad.data.norm(2).item() ** 2
-            grad_norm = grad_norm ** 0.5
-
-            optimizer.step()
-            scheduler.step()
-
-            epoch_loss += loss.item()
-            num_batches += 1
-
-        # Average training loss for the epoch
-        train_loss = epoch_loss / num_batches
-
-        # Get current learning rate
-        lr = optimizer.param_groups[0]['lr']
-
-        # Validation (compute val_f1 for early stopping but don't log to WandB)
-        model.eval()
-        val_preds, val_labels = [], []
-        with torch.no_grad():
-            for inputs, labels in val_loader:
-                inputs, labels = inputs.to(device), labels.to(device)
-                outputs = model(inputs)
-                _, preds = torch.max(outputs, 1)
-                val_preds.extend(preds.cpu().numpy())
-                val_labels.extend(labels.cpu().numpy())
-
-        val_f1 = f1_score(val_labels, val_preds, average='macro')
-
-        # Log training metrics to WandB (same as old script)
-        wandb.log({
-            "train/loss": train_loss,
-            "train/learning_rate": lr,
-            "train/gradient_norm": grad_norm,
-            "epoch": epoch
-        })
-
-        # Early stopping
-        if val_f1 > best_f1:
-            best_f1 = val_f1
-            counter = 0
-            torch.save(model.state_dict(), os.path.join(EXPERIMENT_SAVE_DIR, f"{MODEL_NAME}_best.pth"))
-        else:
-            counter += 1
-            if counter >= patience:
-                print(f"Early stopping at epoch {epoch}")
-                break
-
-        # Save checkpoint
-        torch.save({
-            'epoch': epoch + 1,
-            'model_state_dict': model.state_dict(),
-            'optimizer_state_dict': optimizer.state_dict(),
-            'scheduler_state_dict': scheduler.state_dict(),
-            'best_metric': best_f1
-        }, latest_ckpt)
-
-    # ---------------------------
+    # ----------------------------
     # 7. Evaluation
-    # ---------------------------
+    # ----------------------------
     print("Evaluating model on test set...")
     best_model_path = os.path.join(EXPERIMENT_SAVE_DIR, f"{MODEL_NAME}_best.pth")
     if os.path.exists(best_model_path):
@@ -263,6 +207,7 @@ def main():
     fps_gpu = None
     test_results = None
     if torch.cuda.is_available():
+        criterion.to('cuda')  # Ensure criterion is on GPU
         fps_gpu, test_results = measure_fps(
             model=model,
             test_loader=test_loader,
@@ -273,6 +218,7 @@ def main():
         )
         print(f"GPU FPS: {fps_gpu:.2f}")
 
+    criterion.to('cpu')  # Ensure criterion is on CPU
     fps_cpu, test_results_cpu = measure_fps(
         model=model,
         test_loader=test_loader,
