@@ -115,9 +115,13 @@ def main():
         freeze=FREEZE
     )
 
-    # Unfreeze later blocks since FREEZE=True
+    # Unfreeze early and later blocks since FREEZE=True
     if FREEZE:
-        # Unfreeze features.9 and features.10
+        # Unfreeze early layers (features.0 to features.2, as in your previous successful run)
+        for name, param in model.named_parameters():
+            if "features.0" in name or "features.1" in name or "features.2" in name:
+                param.requires_grad = True
+        # Unfreeze later layers (features.9 and features.10)
         for name, param in model.named_parameters():
             if "features.9" in name or "features.10" in name:
                 param.requires_grad = True
@@ -147,7 +151,7 @@ def main():
         optimizer = optim.Adam(model.parameters(), lr=LR, weight_decay=WEIGHT_DECAY)
 
     # Use CosineAnnealingWarmRestarts scheduler
-    scheduler = torch.optim.lr_scheduler.CosineAnnealingWarmRestarts(optimizer, T_0=10, T_mult=2, eta_min=1e-6)
+    scheduler = torch.optim.lr_scheduler.CosineAnnealingWarmRestarts(optimizer, T_0=20, T_mult=1, eta_min=1e-6)
 
     # ----------------------------
     # 6. Training
