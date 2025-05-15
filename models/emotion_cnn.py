@@ -3,7 +3,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 class MBConvBlock(nn.Module):
-    def __init__(self, in_channels, out_channels, kernel_size=3, expansion_factor=6, stride=1):
+    def __init__(self, in_channels, out_channels, kernel_size=3, expansion_factor=3, stride=1):
         super(MBConvBlock, self).__init__()
         self.stride = stride
         self.in_channels = in_channels
