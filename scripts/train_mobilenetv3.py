@@ -16,7 +16,6 @@ import wandb
 import shutil
 from sklearn.metrics import f1_score
 from torch.utils.data import WeightedRandomSampler
-import torchvision.transforms as transforms
 
 import constants
 import argparse
@@ -81,36 +80,18 @@ def main():
     huggingface_hub.login(token=os.getenv("HUGGINGFACE_TOKEN"))
 
     # ---------------------------
-    # 3. Data Loading with Augmentation
+    # 3. Data Loading
     # ---------------------------
     print("Downloading data...")
     download_data()
 
     print("Creating data loaders...")
-    # Add augmentation to training data
-    train_transforms = transforms.Compose([
-        transforms.Resize((IMAGE_SIZE, IMAGE_SIZE)),
-        transforms.RandomHorizontalFlip(),
-        transforms.RandomRotation(15),
-        transforms.ColorJitter(brightness=0.2, contrast=0.2, saturation=0.2),
-        transforms.RandomAffine(degrees=0, translate=(0.1, 0.1)),
-        transforms.ToTensor(),
-        transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
-    ])
-    val_transforms = transforms.Compose([
-        transforms.Resize((IMAGE_SIZE, IMAGE_SIZE)),
-        transforms.ToTensor(),
-        transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
-    ])
-
-    # Update get_data_loaders to use these transforms
+    # Use the original call to get_data_loaders without passing transforms
     train_loader, val_loader, test_loader, num_classes = get_data_loaders(
         data_dir=constants.DATA_DIR,
         batch_size=BATCH_SIZE,
         image_size=IMAGE_SIZE,
-        num_workers=NUM_WORKERS,
-        train_transforms=train_transforms,
-        val_transforms=val_transforms
+        num_workers=NUM_WORKERS
     )
 
     # Weighted sampling for class imbalance
@@ -142,7 +123,7 @@ def main():
             param.requires_grad = False
         # Unfreeze last few blocks (adjust indices based on MobileNetV3 structure)
         for name, param in model.named_parameters():
-            if "features.9" in name or "features.10" in name or "features.11" in name:
+            if "features.9" in name or "features.10" in name:
                 param.requires_grad = True
         for param in model.classifier.parameters():
             param.requires_grad = True
