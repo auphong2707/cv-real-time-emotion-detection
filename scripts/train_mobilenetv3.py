@@ -178,16 +178,35 @@ def main():
 
     for epoch in range(start_epoch, EPOCHS):
         model.train()
+        epoch_loss = 0.0
+        num_batches = 0
         for inputs, labels in train_loader:
             inputs, labels = inputs.to(device), labels.to(device)
             outputs = model(inputs)
             loss = criterion(outputs, labels)
             optimizer.zero_grad()
             loss.backward()
+
+            # Compute gradient norm
+            grad_norm = 0.0
+            for p in model.parameters():
+                if p.grad is not None:
+                    grad_norm += p.grad.data.norm(2).item() ** 2
+            grad_norm = grad_norm ** 0.5
+
             optimizer.step()
             scheduler.step()
 
-        # Validation
+            epoch_loss += loss.item()
+            num_batches += 1
+
+        # Average training loss for the epoch
+        train_loss = epoch_loss / num_batches
+
+        # Get current learning rate
+        lr = optimizer.param_groups[0]['lr']
+
+        # Validation (compute val_f1 for early stopping but don't log to WandB)
         model.eval()
         val_preds, val_labels = [], []
         with torch.no_grad():
@@ -199,10 +218,12 @@ def main():
                 val_labels.extend(labels.cpu().numpy())
 
         val_f1 = f1_score(val_labels, val_preds, average='macro')
-        val_f1_per_class = f1_score(val_labels, val_preds, average=None, labels=range(num_classes))
+
+        # Log training metrics to WandB (same as old script)
         wandb.log({
-            "val_f1": val_f1,
-            "val_f1_per_class": val_f1_per_class,
+            "train/loss": train_loss,
+            "train/learning_rate": lr,
+            "train/gradient_norm": grad_norm,
             "epoch": epoch
         })
 
