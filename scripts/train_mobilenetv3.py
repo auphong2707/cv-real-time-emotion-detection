@@ -95,10 +95,12 @@ def main():
     )
 
     # Weighted sampling for class imbalance
-    class_counts = torch.bincount(torch.tensor(train_loader.dataset.labels))
+    # Use 'targets' since ImageFolder is used in get_data_loaders
+    labels = train_loader.dataset.targets
+    class_counts = torch.bincount(torch.tensor(labels))
     total = sum(class_counts)
     class_weights = total / (len(class_counts) * class_counts.float())
-    sample_weights = [class_weights[label] for label in train_loader.dataset.labels]
+    sample_weights = [class_weights[label] for label in labels]
     sampler = WeightedRandomSampler(sample_weights, len(sample_weights))
     train_loader = torch.utils.data.DataLoader(
         train_loader.dataset,
