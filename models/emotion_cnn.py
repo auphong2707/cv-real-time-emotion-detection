@@ -11,7 +11,14 @@ class EmotionCNN(nn.Module):
         self.vgg_trunk = nn.Sequential(*list(vgg.features)[:17])  # up to 28x28x256
         
         # 2) 1x1 convolution to project 256 -> 40 channels
-        self.proj = nn.Conv2d(256, 40, kernel_size=1, padding=0)
+        # instead of a single 256→40:
+        self.proj = nn.Sequential(
+            nn.Conv2d(256, 128, kernel_size=1, padding=0),
+            nn.ReLU(inplace=True),
+            nn.Conv2d(128, 40, kernel_size=1, padding=0),
+            nn.ReLU(inplace=True),
+        )
+
         
         # 3) EfficientNet-B0 tail from Block 4 onward
         eff = models.efficientnet_b0(pretrained=False)
