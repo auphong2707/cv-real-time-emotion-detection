@@ -1,58 +1,45 @@
 import torch
 import torch.nn as nn
-import torchvision.models as models
+from torchvision import models
 
 class EmotionCNN(nn.Module):
     def __init__(self, num_classes: int, in_channels: int = 3, image_size: tuple = (224, 224)):
-        super().__init__()
-        # --- 1) Load pretrained backbones ---
+        super(EmotionCNN, self).__init__()
+        
+        # 1) VGG-16 trunk up to block3_pool (features[:17])
         vgg = models.vgg16(pretrained=False)
+        self.vgg_trunk = nn.Sequential(*list(vgg.features)[:17])  # up to 28x28x256
+        
+        # 2) 1x1 convolution to project 256 -> 40 channels
+        self.proj = nn.Conv2d(256, 40, kernel_size=1, padding=0)
+        
+        # 3) EfficientNet-B0 tail from Block 4 onward
         eff = models.efficientnet_b0(pretrained=False)
-
-        # --- 2) (Optional) Adapt first conv if in_channels != 3 ---
-        if in_channels != 3:
-            # VGG stem
-            orig = vgg.features[0]
-            vgg.features[0] = nn.Conv2d(in_channels,
-                                        orig.out_channels,
-                                        kernel_size=orig.kernel_size,
-                                        stride=orig.stride,
-                                        padding=orig.padding)
-            # EfficientNet stem
-            # features[0] is a ConvBNAct block: conv is at [0]
-            orig = eff.features[0][0]
-            eff.features[0][0] = nn.Conv2d(in_channels,
-                                           orig.out_channels,
-                                           kernel_size=orig.kernel_size,
-                                           stride=orig.stride,
-                                           padding=orig.padding,
-                                           bias=False)
-
-        # --- 3) Truncate each to the 28×28 output stage ---
-        # VGG16: stop after block3_pool (features indices 0–16 inclusive)
-        self.vgg_trunc = nn.Sequential(*list(vgg.features.children())[:17])
-        # EfficientNet-B0: keep stem + first 5 MBConv blocks
-        stem = eff.features[0]
-        blocks = eff.features[1]
-        self.eff_trunc = nn.Sequential(stem, *list(blocks[:5]))
-
-        # --- 4) Head: global‐avg‐pool + FC layers ---
-        # After concat we have 256 (VGG) + 40 (Eff) = 296 channels
-        cat_channels = 256 + 40
-        self.pool = nn.AdaptiveAvgPool2d(1)   # → (N, 296, 1, 1)
+        # According to torchvision's feature list:
+        # features[0] = stem, [1]=MBConv1, [2]=MBConv2, [3]=MBConv3 (output 28x28)
+        # so Block4 starts at index 4
+        eff_blocks = list(eff.features)[4:]
+        self.eff_tail = nn.Sequential(*eff_blocks)
+        self.avgpool = eff.avgpool  # AdaptiveAvgPool2d
+        
+        # 4) Classifier: override to match num_classes
+        # eff.classifier = [Dropout, Linear(in_features, 1000)]
+        dropout_p = eff.classifier[0].p
+        in_feats = eff.classifier[1].in_features
         self.classifier = nn.Sequential(
-            nn.Flatten(),                     # → (N, 296)
-            nn.Linear(cat_channels, 256),
-            nn.ReLU(inplace=True),
-            nn.Dropout(0.5),
-            nn.Linear(256, num_classes)
+            nn.Dropout(dropout_p),
+            nn.Linear(in_feats, num_classes)
         )
-
+    
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        # x: (N, in_channels, H, W)
-        x1 = self.vgg_trunc(x)    # → (N,256,28,28)
-        x2 = self.eff_trunc(x)    # → (N, 40,28,28)
-        x = torch.cat([x1, x2], dim=1)      # → (N,296,28,28)
-        x = self.pool(x)                     # → (N,296,1,1)
-        logits = self.classifier(x)          # → (N,num_classes)
-        return logits
+        # VGG trunk
+        x = self.vgg_trunk(x)          # -> [B, 256, 28, 28]
+        # projection
+        x = self.proj(x)               # -> [B, 40, 28, 28]
+        # EfficientNet tail
+        x = self.eff_tail(x)           # -> [B, 1280, 7, 7]
+        x = self.avgpool(x)            # -> [B, 1280, 1, 1]
+        x = torch.flatten(x, 1)        # -> [B, 1280]
+        # classifier
+        x = self.classifier(x)         # -> [B, num_classes]
+        return x
