@@ -103,7 +103,7 @@ def main():
     # ---------------------------
     # 5. Loss, Optimizer, Scheduler
     # ---------------------------
-    criterion = nn.CrossEntropyLoss()
+    criterion = nn.CrossEntropyLoss(label_smoothing=0.1)
     optimizer = optim.Adam(
         filter(lambda p: p.requires_grad, model.parameters()) if FREEZE else model.parameters(),
         lr=LR, weight_decay=WEIGHT_DECAY
@@ -116,8 +116,10 @@ def main():
             return max(0.0, float(num_training_steps - current_step) / float(max(1, num_training_steps - num_warmup_steps)))
         return torch.optim.lr_scheduler.LambdaLR(optimizer, lr_lambda)
 
-    total_steps = EPOCHS * len(train_loader)
-    scheduler = get_linear_schedule_with_warmup(optimizer, num_training_steps=total_steps)
+    from torch.optim.lr_scheduler import CosineAnnealingLR
+
+    scheduler = CosineAnnealingLR(optimizer, T_max=EPOCHS)
+
 
     # ----------------------------
     # 6. Checkpoint Loading

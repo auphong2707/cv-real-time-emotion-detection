@@ -15,7 +15,10 @@ def get_efficientnet_b0(num_classes=8, pretrained=True, freeze=False):
 
     # Replace the classifier
     in_features = model.classifier[1].in_features
-    model.classifier[1] = nn.Linear(in_features, num_classes)
+    model.classifier = nn.Sequential(
+        nn.Dropout(0.3),
+        nn.Linear(in_features, num_classes)
+    )
 
     # Optionally freeze the feature extractor
     if freeze:
