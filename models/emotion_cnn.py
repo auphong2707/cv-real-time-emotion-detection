@@ -97,16 +97,14 @@ class EmotionCNN(nn.Module):
         
         # Fully connected layers
         self.fc = nn.Sequential(
-            nn.Flatten(),
-            nn.Linear(flattened_size, 4096),
-            nn.ReLU(),
-            nn.Dropout(0.5),
-            nn.Linear(4096, 4096),
-            nn.ReLU(),
-            nn.Dropout(0.5),
-            nn.Linear(4096, num_classes),
-            nn.Softmax(dim=1)
-        )
+        # collapse H×W to 1×1
+        nn.AdaptiveAvgPool2d(output_size=1),
+        # shape: (batch, 512, 1, 1) → (batch, 512)
+        nn.Flatten(),
+        # now a single linear layer
+        nn.Linear(512, num_classes),
+        nn.Softmax(dim=1)
+)
     
     def forward(self, x):
         x = self.block1(x)
