@@ -205,7 +205,7 @@ def main():
         model=model,
         test_loader=test_loader,
         criterion=criterion,
-        device='cpu',
+        device='cuda',
         experiment_save_dir=EXPERIMENT_SAVE_DIR,
         save_confusion_matrix=False
     )
