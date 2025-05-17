@@ -5,6 +5,7 @@ import torchvision.models as models
 from models.efficientnet_b0 import get_efficientnet_b0  
 from models.mobilenetv3 import get_mobilenetv3  
 from models.vgg16 import get_vgg16
+from models.emotion_cnn import EmotionCNN
 
 def load_model(model_type, model_path, device):
     """
@@ -17,13 +18,19 @@ def load_model(model_type, model_path, device):
             model = get_mobilenetv3()
         elif model_type == "vgg16":
             model = get_vgg16()
+        elif model_type == "custom":
+            model = EmotionCNN(8)
         else:
             raise ValueError(f"Unsupported model_type: {model_type}")
-
-        state_dict = torch.load(model_path, map_location=device)
-        model.load_state_dict(state_dict)
+        
         model.eval()
         model.to(device)
+
+        if model_path is None:
+            return model
+        state_dict = torch.load(model_path, map_location=device)
+        model.load_state_dict(state_dict)
+        
         return model
     except Exception as e:
         print(f"Failed to load model: {e}")
@@ -48,8 +55,8 @@ def measure_fps(model, input_shape, device, iterations=100):
 
 def main():
     parser = argparse.ArgumentParser(description="Test FPS of a PyTorch CV model.")
-    parser.add_argument("--model_path", type=str, required=True, help="Path to the model .pth/.pt file")
-    parser.add_argument("--model_type", type=str, choices=["efficientnet_b0", "mobilenetv3", "vgg16"], required=True, help="Model architecture type")
+    parser.add_argument("--model_path", type=str, required=False, help="Path to the model .pth/.pt file")
+    parser.add_argument("--model_type", type=str, choices=["efficientnet_b0", "mobilenetv3", "vgg16", "custom"], required=True, help="Model architecture type")
     parser.add_argument("--device", type=str, default="cuda" if torch.cuda.is_available() else "cpu")
     parser.add_argument("--input_shape", type=int, nargs=4, default=[1, 3, 224, 224],
                         help="Input shape as batch_size channels height width")
@@ -78,3 +85,6 @@ if __name__ == "__main__":
 
 # VGG16
 ## python test_fps.py --model_type vgg16 --model_path deploy_models/vgg16_best.pth
+
+# EmotionCNN
+## python test_fps.py --model_type custom --model_path deploy_models/emotioncnn_best.pth
