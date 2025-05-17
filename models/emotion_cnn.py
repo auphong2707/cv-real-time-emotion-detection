@@ -7,7 +7,7 @@ class EmotionCNN(nn.Module):
         super(EmotionCNN, self).__init__()
         
         # VGG-16 trunk
-        vgg = models.vgg16(pretrained=False)
+        vgg = models.vgg16(pretrained=True)
         vgg_trunk = list(vgg.features)[:17]  # up to 28x28x256
 
         # Projection block: 256 → 40
