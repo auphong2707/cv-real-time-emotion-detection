@@ -1,0 +1,307 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Emotion Recognition</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600&display=swap" rel="stylesheet">
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        body {
+            background: linear-gradient(135deg, #f5f7fa, #e4e7eb);
+            color: #2d3436;
+            font-family: 'Poppins', sans-serif;
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding: 30px;
+        }
+        .container {
+            display: flex;
+            flex-wrap: wrap;
+            max-width: 1200px;
+            width: 100%;
+            background: rgba(255, 255, 255, 0.95);
+            border-radius: 20px;
+            box-shadow: 0 15px 40px rgba(0, 0, 0, 0.1);
+            overflow: hidden;
+            animation: fadeIn 1s ease-in;
+            border: 1px solid rgba(0, 0, 0, 0.05);
+        }
+        .video-container {
+            flex: 3;
+            min-width: 300px;
+            padding: 25px;
+            background: linear-gradient(135deg, #ffffff, #f1f3f5);
+        }
+        .controls-container {
+            flex: 1;
+            min-width: 250px;
+            padding: 25px;
+            background: rgba(241, 243, 245, 0.7);
+            backdrop-filter: blur(10px);
+            max-height: 80vh;
+            overflow-y: auto;
+        }
+        img {
+            width: 100%;
+            height: auto;
+            border-radius: 15px;
+            box-shadow: 0 8px 20px rgba(0, 0, 0, 0.1);
+            transition: transform 0.3s;
+        }
+        img:hover {
+            transform: scale(1.02);
+        }
+        .model-select-container {
+            margin-bottom: 25px;
+        }
+        label {
+            font-size: 1.2rem;
+            font-weight: 500;
+            color: #2d3436;
+            margin-bottom: 12px;
+            display: block;
+        }
+        select {
+            width: 100%;
+            padding: 14px;
+            font-size: 1rem;
+            background: linear-gradient(135deg, #55efc4, #00b894);
+            color: #fff;
+            border: none;
+            border-radius: 10px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            box-shadow: 0 4px 15px rgba(0, 184, 148, 0.3);
+        }
+        select:hover, select:focus {
+            transform: translateY(-3px);
+            box-shadow: 0 6px 20px rgba(0, 184, 148, 0.4);
+            outline: none;
+        }
+        #chartsContainer {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 15px;
+        }
+        canvas {
+            background: #ffffff;
+            border-radius: 15px;
+            padding: 10px;
+            box-shadow: 0 8px 20px rgba(0, 0, 0, 0.1);
+            animation: slideIn 0.7s ease-out;
+            max-width: 100%;
+            height: 150px !important;
+        }
+        #status {
+            position: fixed;
+            bottom: 20px;
+            width: 90%;
+            max-width: 1180px;
+            background: linear-gradient(135deg, #dfe6e9, #b2bec3);
+            padding: 15px;
+            text-align: center;
+            font-size: 1.1rem;
+            font-weight: 400;
+            border-radius: 10px;
+            box-shadow: 0 8px 20px rgba(0, 0, 0, 0.1);
+            backdrop-filter: blur(5px);
+        }
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(20px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        @keyframes slideIn {
+            from { opacity: 0; transform: translateY(30px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        @media (max-width: 768px) {
+            .container {
+                flex-direction: column;
+            }
+            .video-container, .controls-container {
+                padding: 20px;
+            }
+            #chartsContainer {
+                grid-template-columns: 1fr;
+            }
+            #status {
+                width: 95%;
+                bottom: 10px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="video-container">
+            <img id="videoFeed" src="/video_feed" alt="Video Feed">
+        </div>
+        <div class="controls-container">
+            <div class="model-select-container">
+                <label for="modelSelect">Select Model</label>
+                <select id="modelSelect" onchange="switchModel()">
+                    {% for model in model_files %}
+                        <option value="{{ loop.index0 }}" {% if model == current_model %}selected{% endif %}>{{ model }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div id="chartsContainer"></div>
+        </div>
+    </div>
+    <div id="status">Status: Initializing...</div>
+
+    <script>
+        const labels = ["Anger", "Contempt", "Disgust", "Fear", "Happy", "Neutral", "Sad", "Surprise"];
+        const chartsContainer = document.getElementById('chartsContainer');
+        const colorPalette = {
+            backgroundColor: [
+                'rgba(255, 107, 107, 0.7)', // Red
+                'rgba(255, 159, 67, 0.7)',  // Orange
+                'rgba(255, 206, 84, 0.7)',  // Yellow
+                'rgba(72, 219, 251, 0.7)',  // Cyan
+                'rgba(84, 160, 255, 0.7)',  // Blue
+                'rgba(186, 104, 200, 0.7)', // Purple
+                'rgba(75, 192, 192, 0.7)',  // Teal
+                'rgba(149, 225, 211, 0.7)'  // Mint
+            ],
+            borderColor: [
+                'rgba(255, 107, 107, 1)',
+                'rgba(255, 159, 67, 1)',
+                'rgba(255, 206, 84, 1)',
+                'rgba(72, 219, 251, 1)',
+                'rgba(84, 160, 255, 1)',
+                'rgba(186, 104, 200, 1)',
+                'rgba(75, 192, 192, 1)',
+                'rgba(149, 225, 211, 1)'
+            ]
+        };
+    
+        let charts = []; // Array to store chart instances
+    
+        const ws = new WebSocket(`ws://${window.location.host}/ws`);
+        ws.onmessage = function(event) {
+            const data = JSON.parse(event.data);
+            console.log('Received data:', data);
+            const faces = data.faces || [];
+            const status = data.status;
+    
+            // Adjust the number of charts based on the number of faces (limit to 4)
+            while (charts.length < Math.min(faces.length, 4)) {
+                const index = charts.length;
+                const canvas = document.createElement('canvas');
+                canvas.id = `emotionChart${index}`;
+                chartsContainer.appendChild(canvas);
+                const ctx = canvas.getContext('2d');
+                const newChart = new Chart(ctx, {
+                    type: 'bar',
+                    data: {
+                        labels: labels,
+                        datasets: [{
+                            label: `Face ${index + 1}`,
+                            data: new Array(labels.length).fill(0),
+                            backgroundColor: colorPalette.backgroundColor,
+                            borderColor: colorPalette.borderColor,
+                            borderWidth: 1,
+                            borderRadius: 6
+                        }]
+                    },
+                    options: {
+                        animation: {
+                            duration: 400,
+                            easing: 'easeOutBounce'
+                        },
+                        scales: {
+                            y: {
+                                beginAtZero: true,
+                                max: 1,
+                                display: true,
+                                ticks: {
+                                    font: {
+                                        size: 10
+                                    }
+                                },
+                                title: {
+                                    display: true,
+                                    text: 'Probability',
+                                    font: {
+                                        size: 12
+                                    }
+                                }
+                            },
+                            x: {
+                                display: true,
+                                ticks: {
+                                    font: {
+                                        size: 10
+                                    },
+                                    autoSkip: false,
+                                    maxRotation: 45,
+                                    minRotation: 45
+                                }
+                            }
+                        },
+                        plugins: {
+                            legend: { display: false },
+                            tooltip: {
+                                enabled: true,
+                                backgroundColor: 'rgba(45, 52, 54, 0.9)',
+                                titleColor: '#ffffff',
+                                bodyColor: '#ffffff',
+                                borderColor: '#55efc4',
+                                borderWidth: 1,
+                                cornerRadius: 8
+                            },
+                            title: {
+                                display: true,
+                                text: `Face ${index + 1}`,
+                                font: {
+                                    size: 14
+                                },
+                                padding: {
+                                    top: 10,
+                                    bottom: 10
+                                }
+                            }
+                        }
+                    }
+                });
+                charts.push(newChart);
+            }
+    
+            // Remove extra charts if the number of faces decreases
+            while (charts.length > Math.min(faces.length, 4)) {
+                const chartToRemove = charts.pop();
+                chartToRemove.destroy();
+                chartsContainer.removeChild(chartsContainer.lastChild);
+            }
+    
+            // Update data for each chart
+            faces.slice(0, 4).forEach((face, index) => {
+                if (charts[index]) {
+                    charts[index].data.datasets[0].data = face.probabilities || new Array(labels.length).fill(0);
+                    charts[index].update(); // Refresh the chart with new data
+                }
+            });
+    
+            document.getElementById('status').innerText = `Status: ${status}`;
+        };
+    
+        async function switchModel() {
+            const modelIdx = document.getElementById('modelSelect').value;
+            const response = await fetch(`/switch_model/${modelIdx}`, { method: 'POST' });
+            const result = await response.json();
+            if (result.status) {
+                document.getElementById('status').innerText = `Status: ${result.status}`;
+            }
+        }
+    </script>
+</body>
+</html>
