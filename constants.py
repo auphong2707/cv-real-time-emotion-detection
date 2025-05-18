@@ -4,13 +4,13 @@
 # MobileNetV2 Constants
 #
 MODEL_NAME_MNV2 = "mobilenetv2"
-EXPERIMENT_NAME_MNV2 = "mobilenetv2-experiment-4"
+EXPERIMENT_NAME_MNV2 = "mobilenetv2-experiment-5"
 EPOCHS_MNV2 = 30
 BATCH_SIZE_MNV2 = 128
 IMAGE_SIZE_MNV2 = 224
 NUM_WORKERS_MNV2 = 2
 WEIGHT_DECAY_MNV2 = 1e-5
-LR_MNV2 = 5e-4
+LR_MNV2 = 1e-4
 PRETRAINED_MNV2 = True
 FREEZE_MNV2 = False
 
