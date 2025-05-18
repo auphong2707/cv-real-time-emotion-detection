@@ -4,8 +4,8 @@
 # MobileNetV2 Constants
 #
 MODEL_NAME_MNV2 = "mobilenetv2"
-EXPERIMENT_NAME_MNV2 = "mobilenetv2-experiment-6"
-EPOCHS_MNV2 = 30
+EXPERIMENT_NAME_MNV2 = "mobilenetv2-experiment-9"
+EPOCHS_MNV2 = 10
 BATCH_SIZE_MNV2 = 128
 IMAGE_SIZE_MNV2 = 224
 NUM_WORKERS_MNV2 = 2
