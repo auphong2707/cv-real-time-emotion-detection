@@ -135,7 +135,7 @@ def main():
     latest_ckpt = find_latest_checkpoint(EXPERIMENT_SAVE_DIR)
     if latest_ckpt:
         print(f"Resuming training from checkpoint: {latest_ckpt}")
-        checkpoint = torch.load(latest_ckpt, map_location=device)
+        checkpoint = torch.load(latest_ckpt, map_location=device, weights_only=False)
         model.load_state_dict(checkpoint['model_state_dict'])
         optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
         scheduler.load_state_dict(checkpoint['scheduler_state_dict'])
@@ -180,7 +180,7 @@ def main():
     best_model_path = os.path.join(EXPERIMENT_SAVE_DIR, f"{MODEL_NAME}_best.pth")
     if os.path.exists(best_model_path):
         print(f"Loading best model from {best_model_path}...")
-        model.load_state_dict(torch.load(best_model_path, weights_only=False))
+        model.load_state_dict(torch.load(best_model_path))
     else:
         raise FileNotFoundError(f"Best model not found at {best_model_path}")
 
