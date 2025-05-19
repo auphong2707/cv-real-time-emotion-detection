@@ -155,7 +155,7 @@ def main():
     latest_ckpt = find_latest_checkpoint(EXPERIMENT_SAVE_DIR)
     if latest_ckpt:
         print(f"Resuming training from checkpoint: {latest_ckpt}")
-        checkpoint = torch.load(latest_ckpt, map_location=device)
+        checkpoint = torch.load(latest_ckpt, map_location=device, weights_only=False)
         model.load_state_dict(checkpoint['model_state_dict'])
         optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
         scheduler.load_state_dict(checkpoint['scheduler_state_dict'])
@@ -206,77 +206,76 @@ def main():
 
     model.eval()
 
-    # Measure FPS on GPU (if available)
-    fps_gpu = None
-    test_results = None
-    if torch.cuda.is_available():
-        fps_gpu, test_results = measure_fps(
-            model=model,
-            test_loader=test_loader,
-            criterion=criterion,
-            device='cuda',
-            experiment_save_dir=EXPERIMENT_SAVE_DIR,
-            save_confusion_matrix=True
-        )
-        print(f"GPU FPS: {fps_gpu:.2f}")
-
-    # Measure FPS on CPU
-    fps_cpu, test_results_cpu = measure_fps(
-        model=model,
-        test_loader=test_loader,
-        criterion=criterion,
-        device='cpu',
-        experiment_save_dir=EXPERIMENT_SAVE_DIR,
-        save_confusion_matrix=False
-    )
-    print(f"CPU FPS: {fps_cpu:.2f}")
-
     # Use GPU test results if available, else CPU results
-    final_test_results = test_results if test_results is not None else test_results_cpu
-
-    # Move model back to original device
-    model.to(device)
+    test_result = validate(model, test_loader, criterion, device, confusion_matrix_save_path=os.path.join(EXPERIMENT_SAVE_DIR, "confusion_matrix.png"))
 
     wandb.log({
-        "test_loss": final_test_results['loss'],
-        "test_accuracy": final_test_results['accuracy'],
-        "test_precision": final_test_results['precision'],
-        "test_recall": final_test_results['recall'],
-        "test_f1_score": final_test_results['f1_score'],
-        "test_fps_gpu": fps_gpu if fps_gpu is not None else 0.0,
-        "test_fps_cpu": fps_cpu,
+        "test_loss": test_result['loss'],
+        "test_accuracy": test_result['accuracy'],
+        "test_precision": test_result['precision'],
+        "test_recall": test_result['recall'],
+        "test_f1_score": test_result['f1_score'],
     })
 
+    metrics_per_class = {}
+    for idx, label in ID2LABEL.items():
+        wandb.log({
+            f"test_precision_{label}": test_result['precision_per_class'][idx],
+            f"test_recall_{label}":    test_result['recall_per_class'][idx],
+            f"test_f1_score_{label}":  test_result['f1_score_per_class'][idx],
+        })
+
+        metrics_per_class[label] = {
+            'precision': test_result['precision_per_class'][idx],
+            'recall':    test_result['recall_per_class'][idx],
+            'f1_score':  test_result['f1_score_per_class'][idx],
+        }
+
     print("Test Results:")
-    print(f"   Loss: {final_test_results['loss']:.4f}")
-    print(f"   Accuracy: {final_test_results['accuracy']:.2f}%")
-    print(f"   Precision: {final_test_results['precision']:.4f}")
-    print(f"   Recall: {final_test_results['recall']:.4f}")
-    print(f"   F1 Score: {final_test_results['f1_score']:.4f}")
-    print(f"   FPS GPU (Frames/sec): {fps_gpu:.2f}" if fps_gpu is not None else "   FPS GPU: N/A")
-    print(f"   FPS CPU (Frames/sec): {fps_cpu:.2f}")
+
+    print("=== Overall Metrics ===")
+    print(f"   Loss: {test_result['loss']:.4f}")
+    print(f"   Accuracy: {test_result['accuracy']:.2f}%")
+    print(f"   Precision: {test_result['precision']:.4f}")
+    print(f"   Recall: {test_result['recall']:.4f}")
+    print(f"   F1 Score: {test_result['f1_score']:.4f}")
+    
+    print("\n=== Per-Class Metrics ===")
+    for label, metrics in metrics_per_class.items():
+        print(f"   {label}:")
+        print(f"      Precision: {metrics['precision']:.4f}")
+        print(f"      Recall:    {metrics['recall']:.4f}")
+        print(f"      F1 Score:  {metrics['f1_score']:.4f}")
+
     print("Training and evaluation completed.")
 
-    results_file = os.path.join(EXPERIMENT_SAVE_DIR, "results.txt")
-    with open(results_file, "w") as f:
+    with open(os.path.join(EXPERIMENT_SAVE_DIR, "results.txt"), "w") as f:
         f.write("Test Results:\n")
-        f.write(f"   Loss: {final_test_results['loss']:.4f}\n")
-        f.write(f"   Accuracy: {final_test_results['accuracy']:.2f}%\n")
-        f.write(f"   Precision: {final_test_results['precision']:.4f}\n")
-        f.write(f"   Recall: {final_test_results['recall']:.4f}\n")
-        f.write(f"   F1 Score: {final_test_results['f1_score']:.4f}\n")
-        f.write(f"   FPS GPU (Frames/sec): {fps_gpu:.2f}\n" if fps_gpu is not None else "   FPS GPU: N/A\n")
-        f.write(f"   FPS CPU (Frames/sec): {fps_cpu:.2f}\n")
+
+        f.write("=== Overall Metrics ===\n")
+        f.write(f"   Loss: {test_result['loss']:.4f}\n")
+        f.write(f"   Accuracy: {test_result['accuracy']:.2f}%\n")
+        f.write(f"   Precision: {test_result['precision']:.4f}\n")
+        f.write(f"   Recall: {test_result['recall']:.4f}\n")
+        f.write(f"   F1 Score: {test_result['f1_score']:.4f}\n")
+
+        f.write("\n=== Per-Class Metrics ===\n")
+        for label, metrics in metrics_per_class.items():
+            f.write(f"   {label}:\n")
+            f.write(f"      Precision: {metrics['precision']:.4f}\n")
+            f.write(f"      Recall:    {metrics['recall']:.4f}\n")
+            f.write(f"      F1 Score:  {metrics['f1_score']:.4f}\n")
+
+    print(f"Results saved to {os.path.join(EXPERIMENT_SAVE_DIR, 'results.txt')}")
 
     print("Uploading model to Hugging Face...")
-    api = huggingface_hub.HfApi()
-    api.upload_large_folder(
+    huggingface_hub.HfApi().upload_large_folder(
         folder_path=constants.SAVE_DIR,
         repo_id="auphong2707/cv-real-time-emotion-detection",
         repo_type="model",
         private=False
     )
-    print("Model uploaded to Hugging Face.")
+    print("✅ Upload complete.")
 
 if __name__ == "__main__":
     main()
