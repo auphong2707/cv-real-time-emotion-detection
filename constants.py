@@ -1,6 +1,20 @@
 # constants.py
 
 #
+# MobileNetV2 Constants
+#
+MODEL_NAME_MNV2 = "mobilenetv2"
+EXPERIMENT_NAME_MNV2 = "mobilenetv2-experiment-test"
+EPOCHS_MNV2 = 5
+BATCH_SIZE_MNV2 = 128
+IMAGE_SIZE_MNV2 = 224
+NUM_WORKERS_MNV2 = 2
+WEIGHT_DECAY_MNV2 = 1e-5
+LR_MNV2 = 1e-4
+PRETRAINED_MNV2 = True
+FREEZE_MNV2 = False
+
+#
 # MobileNetV3 Constants
 #
 MODEL_NAME_MNV3 = "mobilenetv3"
@@ -39,25 +53,39 @@ EPOCHS_EFFICIENTNET_B0 = 10
 BATCH_SIZE_EFFICIENTNET_B0 = 64
 IMAGE_SIZE_EFFICIENTNET_B0 = 224
 NUM_WORKERS_EFFICIENTNET_B0 = 4
-LR_EFFICIENTNET_B0 = 5e-4
+LR_EFFICIENTNET_B0 = 1e-4
 WEIGHT_DECAY_EFFICIENTNET_B0 = 0.01
 PRETRAINED_EFFICIENTNET_B0 = True
 FREEZE_EFFICIENTNET_B0 = False
 
 
 #
-# ViT Constants
+# EmotionCNN Constants
 #
-MODEL_NAME_VIT = "deit_base_patch16_224"
-EPOCHS_VIT = 30
-BATCH_SIZE_VIT = 128
-IMAGE_SIZE_VIT = 224
-NUM_WORKERS_VIT = 4
-LR_VIT = 3e-5
-PRETRAINED_VIT = True
+MODEL_NAME_EMOTIONCNN = "emotioncnn"
+EXPERIMENT_NAME_EMOTIONCNN = "emotioncnn-experiment-test"
+EPOCHS_EMOTIONCNN = 10
+BATCH_SIZE_EMOTIONCNN = 128
+IMAGE_SIZE_EMOTIONCNN = 224
+NUM_WORKERS_EMOTIONCNN = 4
+LR_EMOTIONCNN = 4e-4
+WEIGHT_DECAY_EMOTIONCNN = 0.01
+PRETRAINED_EMOTIONCNN = False
+FREEZE_EMOTIONCNN = False
 
 #
 # Shared Constants (Data Paths, etc.)
 #
 DATA_DIR = "data/"
 SAVE_DIR = "results"
+
+ID2LABEL = {
+    0: "Anger",
+    1: "Contempt",
+    2: "Disgust",
+    3: "Fear",
+    4: "Happy",
+    5: "Neutral",
+    6: "Sad",
+    7: "Surprise"
+}

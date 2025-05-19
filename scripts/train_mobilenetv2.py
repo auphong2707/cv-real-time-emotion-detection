@@ -1,4 +1,3 @@
-# scripts/train_mobilenetv3.py
 import sys
 import os
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
@@ -7,7 +6,7 @@ set_seed(42)
 
 from utils.dataset import *
 from utils.train_utils import *
-from models.mobilenetv3 import *
+from models.mobilenetv2 import *
 
 import huggingface_hub
 import torch
@@ -20,27 +19,27 @@ import constants
 import argparse
 
 # Parse command-line arguments
-parser = argparse.ArgumentParser(description="Train MobileNetV3 model for emotion detection.")
+parser = argparse.ArgumentParser(description="Train MobileNetV2 model for emotion detection.")
 parser.add_argument("--training_time_limit", type=int, default=39600, help="Training time limit in seconds (default: 39600 seconds or 11 hours).")
 args = parser.parse_args()
 
 def main():
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    print(f"[MobileNetV3] Using device: {device}")
+    print(f"[MobileNetV2] Using device: {device}")
 
     # ---------------------------
     # 1. Hyperparameters
     # ---------------------------
-    MODEL_NAME = constants.MODEL_NAME_MNV3
-    EPOCHS = constants.EPOCHS_MNV3
-    BATCH_SIZE = constants.BATCH_SIZE_MNV3
-    IMAGE_SIZE = constants.IMAGE_SIZE_MNV3
-    NUM_WORKERS = constants.NUM_WORKERS_MNV3
-    LR = constants.LR_MNV3
-    WEIGHT_DECAY = constants.WEIGHT_DECAY_MNV3
-    PRETRAINED = constants.PRETRAINED_MNV3
-    FREEZE = constants.FREEZE_MNV3
-    EXPERIMENT_NAME = constants.EXPERIMENT_NAME_MNV3
+    MODEL_NAME = constants.MODEL_NAME_MNV2
+    EPOCHS = constants.EPOCHS_MNV2
+    BATCH_SIZE = constants.BATCH_SIZE_MNV2
+    IMAGE_SIZE = constants.IMAGE_SIZE_MNV2
+    NUM_WORKERS = constants.NUM_WORKERS_MNV2
+    LR = constants.LR_MNV2
+    WEIGHT_DECAY = constants.WEIGHT_DECAY_MNV2
+    PRETRAINED = constants.PRETRAINED_MNV2
+    FREEZE = constants.FREEZE_MNV2
+    EXPERIMENT_NAME = constants.EXPERIMENT_NAME_MNV2
     EXPERIMENT_SAVE_DIR = constants.SAVE_DIR + '/' + EXPERIMENT_NAME + '/'
 
     print("Hyperparameters and Constants:")
@@ -95,7 +94,7 @@ def main():
     # 4. Model Creation
     # ---------------------------
     print("Creating model...")
-    model = get_mobilenetv3(
+    model = get_mobilenetv2(
         num_classes=num_classes,
         pretrained=PRETRAINED,
         freeze=FREEZE
