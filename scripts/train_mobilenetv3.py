@@ -133,7 +133,7 @@ def main():
     latest_ckpt = os.path.join(EXPERIMENT_SAVE_DIR, "latest_checkpoint.pth")
     if os.path.exists(latest_ckpt):
         print(f"Resuming from checkpoint: {latest_ckpt}")
-        checkpoint = torch.load(latest_ckpt, map_location=device)
+        checkpoint = torch.load(latest_ckpt, map_location=device, weights_only=False)
         model.load_state_dict(checkpoint['model_state_dict'])
         optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
         scheduler.load_state_dict(checkpoint['scheduler_state_dict'])
