@@ -77,3 +77,14 @@ FREEZE_EMOTIONCNN = False
 #
 DATA_DIR = "data/"
 SAVE_DIR = "results"
+
+ID2LABEL = {
+    0: "Anger",
+    1: "Contempt",
+    2: "Disgust",
+    3: "Fear",
+    4: "Happy",
+    5: "Neutral",
+    6: "Sad",
+    7: "Surprise"
+}
