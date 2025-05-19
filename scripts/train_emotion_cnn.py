@@ -1,4 +1,3 @@
-# scripts/train_mobilenetv3.py
 import sys
 import os
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
@@ -7,40 +6,38 @@ set_seed(42)
 
 from utils.dataset import *
 from utils.train_utils import *
-from models.mobilenetv3 import *
-
-import huggingface_hub
+from models.emotion_cnn import EmotionCNN
 import torch
 import torch.nn as nn
 import torch.optim as optim
 import wandb
 import shutil
-
-import constants
+import huggingface_hub
 import argparse
+import constants
 
 # Parse command-line arguments
-parser = argparse.ArgumentParser(description="Train MobileNetV3 model for emotion detection.")
+parser = argparse.ArgumentParser(description="Train EmotionCNN model for emotion detection.")
 parser.add_argument("--training_time_limit", type=int, default=39600, help="Training time limit in seconds (default: 39600 seconds or 11 hours).")
 args = parser.parse_args()
 
 def main():
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    print(f"[MobileNetV3] Using device: {device}")
+    print(f"[EmotionCNN] Using device: {device}")
 
     # ---------------------------
     # 1. Hyperparameters
     # ---------------------------
-    MODEL_NAME = constants.MODEL_NAME_MNV3
-    EPOCHS = constants.EPOCHS_MNV3
-    BATCH_SIZE = constants.BATCH_SIZE_MNV3
-    IMAGE_SIZE = constants.IMAGE_SIZE_MNV3
-    NUM_WORKERS = constants.NUM_WORKERS_MNV3
-    LR = constants.LR_MNV3
-    WEIGHT_DECAY = constants.WEIGHT_DECAY_MNV3
-    PRETRAINED = constants.PRETRAINED_MNV3
-    FREEZE = constants.FREEZE_MNV3
-    EXPERIMENT_NAME = constants.EXPERIMENT_NAME_MNV3
+    MODEL_NAME = constants.MODEL_NAME_EMOTIONCNN
+    EPOCHS = constants.EPOCHS_EMOTIONCNN
+    BATCH_SIZE = constants.BATCH_SIZE_EMOTIONCNN
+    IMAGE_SIZE = constants.IMAGE_SIZE_EMOTIONCNN
+    NUM_WORKERS = constants.NUM_WORKERS_EMOTIONCNN
+    LR = constants.LR_EMOTIONCNN
+    WEIGHT_DECAY = constants.WEIGHT_DECAY_EMOTIONCNN
+    PRETRAINED = constants.PRETRAINED_EMOTIONCNN
+    FREEZE = constants.FREEZE_EMOTIONCNN
+    EXPERIMENT_NAME = constants.EXPERIMENT_NAME_EMOTIONCNN
     EXPERIMENT_SAVE_DIR = constants.SAVE_DIR + '/' + EXPERIMENT_NAME + '/'
 
     print("Hyperparameters and Constants:")
@@ -95,11 +92,7 @@ def main():
     # 4. Model Creation
     # ---------------------------
     print("Creating model...")
-    model = get_mobilenetv3(
-        num_classes=num_classes,
-        pretrained=PRETRAINED,
-        freeze=FREEZE
-    )
+    model = EmotionCNN(num_classes=num_classes, in_channels=3, image_size=IMAGE_SIZE)
     model.to(device)
 
     # ---------------------------
@@ -107,32 +100,41 @@ def main():
     # ---------------------------
     print("Defining loss and optimizer...")
     criterion = nn.CrossEntropyLoss()
-    if FREEZE:
-        optimizer = optim.Adam(
-            filter(lambda p: p.requires_grad, model.parameters()),
-            lr=LR,
-            weight_decay=WEIGHT_DECAY
-        )
-    else:
-        optimizer = optim.Adam(model.parameters(), lr=LR, weight_decay=WEIGHT_DECAY)
+    optimizer = optim.Adam(model.parameters(), lr=LR, weight_decay=WEIGHT_DECAY)
 
+    # Define a Hugging Face-style linear scheduler with warmup
     def get_linear_schedule_with_warmup(optimizer, num_training_steps, num_warmup_steps=0):
         def lr_lambda(current_step):
             if current_step < num_warmup_steps:
                 return float(current_step) / float(max(1, num_warmup_steps))
-            return max(0.0, float(num_training_steps - current_step) / float(max(1, num_training_steps - num_warmup_steps)))
+            return max(
+                0.0, float(num_training_steps - current_step) / float(max(1, num_training_steps - num_warmup_steps))
+            )
+
         return torch.optim.lr_scheduler.LambdaLR(optimizer, lr_lambda)
 
+    # Total number of training steps
     total_steps = EPOCHS * len(train_loader)
-    scheduler = get_linear_schedule_with_warmup(optimizer, num_training_steps=total_steps)
+    
+    scheduler = get_linear_schedule_with_warmup(
+        optimizer, 
+        num_training_steps=total_steps
+    )
 
     # ----------------------------
-    # 6. Training
+    # 6. Checkpoint Loading
     # ----------------------------
     os.makedirs(EXPERIMENT_SAVE_DIR, exist_ok=True)
-    latest_ckpt = os.path.join(EXPERIMENT_SAVE_DIR, "latest_checkpoint.pth")
-    if os.path.exists(latest_ckpt):
-        print(f"Resuming from checkpoint: {latest_ckpt}")
+
+    def find_latest_checkpoint(checkpoint_dir):
+        checkpoint_path = os.path.join(checkpoint_dir, "latest_checkpoint.pth")
+        if os.path.exists(checkpoint_path):
+            return checkpoint_path
+        return None
+    
+    latest_ckpt = find_latest_checkpoint(EXPERIMENT_SAVE_DIR)
+    if latest_ckpt:
+        print(f"Resuming training from checkpoint: {latest_ckpt}")
         checkpoint = torch.load(latest_ckpt, map_location=device, weights_only=False)
         model.load_state_dict(checkpoint['model_state_dict'])
         optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
@@ -140,10 +142,13 @@ def main():
         start_epoch = checkpoint['epoch']
         best_metric = checkpoint.get('best_metric', 0.0)
     else:
-        print("Training from scratch.")
+        print("Train from beginning.")
         start_epoch = 0
         best_metric = 0.0
 
+    # ---------------------------
+    # 7. Training Loop
+    # ---------------------------
     finished_training = train_model(
         model=model,
         train_loader=train_loader,
@@ -156,21 +161,21 @@ def main():
         SAVE_DIR=EXPERIMENT_SAVE_DIR,
         start_epoch=start_epoch,
         best_metric=best_metric,
-        training_time_limit=args.training_time_limit,
-        scheduler=scheduler
+        training_time_limit=args.training_time_limit, 
+        scheduler=scheduler,
     )
-
     if not finished_training:
         print("Deleting raw data to save space...")
         shutil.rmtree(constants.DATA_DIR)
+        # Delete temporary directory
         if os.path.exists("./tmp"):
             shutil.rmtree("./tmp")
-        print("Training stopped due to time limit.")
+        print("Training stopped before completion due to time limit. Exiting training...")
         return
-
-    # ----------------------------
-    # 7. Evaluation
-    # ----------------------------
+    
+    # ---------------------------
+    # 8. Evaluation
+    # ---------------------------
     print("Evaluating model on test set...")
     best_model_path = os.path.join(EXPERIMENT_SAVE_DIR, f"{MODEL_NAME}_best.pth")
     if os.path.exists(best_model_path):
@@ -180,7 +185,7 @@ def main():
         raise FileNotFoundError(f"Best model not found at {best_model_path}")
 
     model.eval()
-
+    
     # Use GPU test results if available, else CPU results
     test_result = validate(model, test_loader, criterion, device, confusion_matrix_save_path=os.path.join(EXPERIMENT_SAVE_DIR, "confusion_matrix.png"))
 

@@ -4,6 +4,10 @@ import time
 import numpy as np
 import torch
 from utils.train_utils import validate
+from models.efficientnet_b0 import get_efficientnet_b0
+from models.mobilenetv2 import get_mobilenetv2
+from models.vgg16 import get_vgg16
+from models.emotion_cnn import EmotionCNN
 
 def set_seed(seed: int):
     """
@@ -58,3 +62,32 @@ def measure_fps(model, test_loader, criterion, device, experiment_save_dir, save
     fps = num_samples / elapsed_time
     
     return fps, test_results
+
+def load_model(model_type, model_path, device):
+    """
+    Load a model from a state_dict checkpoint based on model_type.
+    """
+    try:
+        if model_type == "efficientnet_b0":
+            model = get_efficientnet_b0()  
+        elif model_type == "mobilenetv2":
+            model = get_mobilenetv2()
+        elif model_type == "vgg16":
+            model = get_vgg16()
+        elif model_type == "custom":
+            model = EmotionCNN(8)
+        else:
+            raise ValueError(f"Unsupported model_type: {model_type}")
+        
+        model.eval()
+        model.to(device)
+
+        if model_path is None:
+            return model
+        state_dict = torch.load(model_path, map_location=device)
+        model.load_state_dict(state_dict)
+        
+        return model
+    except Exception as e:
+        print(f"Failed to load model: {e}")
+        exit(1)
