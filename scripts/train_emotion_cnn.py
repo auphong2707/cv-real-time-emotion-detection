@@ -180,7 +180,7 @@ def main():
     best_model_path = os.path.join(EXPERIMENT_SAVE_DIR, f"{MODEL_NAME}_best.pth")
     if os.path.exists(best_model_path):
         print(f"Loading best model from {best_model_path}...")
-        model.load_state_dict(torch.load(best_model_path))
+        model.load_state_dict(torch.load(best_model_path, weights_only=False))
     else:
         raise FileNotFoundError(f"Best model not found at {best_model_path}")
 
