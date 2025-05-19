@@ -1,40 +1,9 @@
 import argparse
 import time
 import torch
-import torchvision.models as models
-from models.efficientnet_b0 import get_efficientnet_b0  
-from models.mobilenetv3 import get_mobilenetv3  
-from models.vgg16 import get_vgg16
-from models.emotion_cnn import EmotionCNN
-
-def load_model(model_type, model_path, device):
-    """
-    Load a model from a state_dict checkpoint based on model_type.
-    """
-    try:
-        if model_type == "efficientnet_b0":
-            model = get_efficientnet_b0()  
-        elif model_type == "mobilenetv3":
-            model = get_mobilenetv3()
-        elif model_type == "vgg16":
-            model = get_vgg16()
-        elif model_type == "custom":
-            model = EmotionCNN(8)
-        else:
-            raise ValueError(f"Unsupported model_type: {model_type}")
-        
-        model.eval()
-        model.to(device)
-
-        if model_path is None:
-            return model
-        state_dict = torch.load(model_path, map_location=device)
-        model.load_state_dict(state_dict)
-        
-        return model
-    except Exception as e:
-        print(f"Failed to load model: {e}")
-        exit(1)
+from utils.general_utils import load_model
+import os
+import json
 
 def measure_fps(model, input_shape, device, iterations=100):
     dummy_input = torch.randn(*input_shape).to(device)
@@ -72,6 +41,13 @@ def main():
     fps = measure_fps(model, args.input_shape, device, args.iterations)
 
     print(f"[RESULT] {args.model_type} FPS: {fps:.2f} frames/second")
+
+    # Export result to file with model name
+    os.makedirs("results", exist_ok=True)
+    model_base = os.path.splitext(os.path.basename(args.model_path))[0] if args.model_path else args.model_type
+    result_filename = f"results/test_fps_{model_base}.json"
+    with open(result_filename, "w") as f:
+        json.dump({"model": args.model_type, "model_file": model_base, "fps": round(fps, 2)}, f, indent=2)
 
 if __name__ == "__main__":
     main()
