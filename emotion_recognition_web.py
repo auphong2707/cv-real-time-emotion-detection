@@ -205,7 +205,7 @@ def generate_frames():
                b'Content-Type: image/jpeg\r\n\r\n' + frame_bytes + b'\r\n')
 
         # Send probabilities of all detected faces via WebSocket
-        status = f"Model: {model_files[current_model_idx]} | FPS: {fps:.2f}"
+        status = f"Model: {model_files[current_model_idx]}"
         data = {"faces": faces_data, "status": status}
         asyncio.run(notify_clients(data))
 
