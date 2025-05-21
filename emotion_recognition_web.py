@@ -1,3 +1,4 @@
+import argparse
 import cv2
 import numpy as np
 import os
@@ -12,6 +13,23 @@ import logging
 from PIL import Image
 import io
 import time
+
+# === BEGIN: CLI args for device selection ===
+parser = argparse.ArgumentParser(description="Face-emotion FastAPI server")
+parser.add_argument(
+    '--cpu',
+    action='store_true',
+    help='Force the model to run on CPU even if GPU is available'
+)
+args, _ = parser.parse_known_args()
+
+# Thiết lập device
+if args.cpu:
+    device = torch.device("cpu")
+else:
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
+logging.info(f"Using device: {device}")
 
 # Setup logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -47,7 +65,10 @@ if not model_files:
     raise FileNotFoundError("No .pth files found in deploy_models/ folder")
 
 # [LOAD MODEL]
-device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+if args.cpu:
+    device = torch.device("cpu")
+else:
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 def load_model(model_path):
     model_name = os.path.basename(model_path).lower()
@@ -57,6 +78,14 @@ def load_model(model_path):
     elif "efficientnet" in model_name:
         logging.info(f"Loading EfficientNet-B0 model: {model_name}")
         model = get_efficientnet_b0(num_classes=8, pretrained=False, freeze=False)
+    elif "mobilenetv2" in model_name:
+        logging.info(f"Loading MobileNetV2 model: {model_name}")
+        from models.mobilenetv2 import get_mobilenetv2
+        model = get_mobilenetv2(num_classes=8, pretrained=False, freeze=False)
+    elif "emotioncnn" in model_name:
+        logging.info(f"Loading Custom model: {model_name}")
+        from models.emotion_cnn import EmotionCNN
+        model = EmotionCNN(num_classes=8)
     else:
         logging.warning(f"Unknown model type for {model_name}, defaulting to VGG16")
         model = get_vgg16(num_classes=8, pretrained=False, freeze=False)
@@ -217,7 +246,7 @@ async def switch_model_endpoint(model_idx: int):
         current_model_path = os.path.join("deploy_models", model_files[current_model_idx])
         model = load_model(current_model_path)
         status = f"Switched to {model_files[current_model_idx]}"
-        await notify_clients([0]*len(class_labels), status)
+        await notify_clients([0]*len(class_labels))
         return {"status": status}
     return {"error": "Invalid model index"}
 
