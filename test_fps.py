@@ -25,7 +25,7 @@ def measure_fps(model, input_shape, device, iterations=100):
 def main():
     parser = argparse.ArgumentParser(description="Test FPS of a PyTorch CV model.")
     parser.add_argument("--model_path", type=str, required=False, help="Path to the model .pth/.pt file")
-    parser.add_argument("--model_type", type=str, choices=["efficientnet_b0", "mobilenetv3", "vgg16", "custom"], required=True, help="Model architecture type")
+    parser.add_argument("--model_type", type=str, choices=["efficientnet_b0", "mobilenetv2", "vgg16", "custom"], required=True, help="Model architecture type")
     parser.add_argument("--device", type=str, default="cuda" if torch.cuda.is_available() else "cpu")
     parser.add_argument("--input_shape", type=int, nargs=4, default=[1, 3, 224, 224],
                         help="Input shape as batch_size channels height width")
@@ -56,8 +56,8 @@ if __name__ == "__main__":
 # EfficientNet-B0
 ## python test_fps.py --model_type efficientnet_b0 --model_path deploy_models/efficientnet_b0_best.pth
 
-# MobileNetV3
-## python test_fps.py --model_type mobilenetv3 --model_path deploy_models/mobilenetv3_best.pth
+# MobileNetV2
+## python test_fps.py --model_type mobilenetv2 --model_path deploy_models/mobilenetv2_best.pth
 
 # VGG16
 ## python test_fps.py --model_type vgg16 --model_path deploy_models/vgg16_best.pth
