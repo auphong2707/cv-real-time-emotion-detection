@@ -11,6 +11,10 @@
     - If there are no models in the folder, download them from [Hugging Face](https://huggingface.co/auphong2707/cv-real-time-emotion-detection/tree/main).
     - The models are located in each folder with the format `model_name_best.pth`. Download and save them in the `deploy_models` folder.
 
+## Compatibility
+
+This version of the code has been tested and is compatible with Python 3.12.3.
+
 ## Running the Application
 
 1. Start the application:
