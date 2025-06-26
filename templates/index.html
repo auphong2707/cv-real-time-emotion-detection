@@ -69,6 +69,9 @@
             margin-bottom: 12px;
             display: block;
         }
+        .model-option {
+            color: black;
+        }
         select {
             width: 100%;
             padding: 14px;
@@ -149,7 +152,7 @@
                 <label for="modelSelect">Select Model</label>
                 <select id="modelSelect" onchange="switchModel()">
                     {% for model in model_files %}
-                        <option value="{{ loop.index0 }}" {% if model == current_model %}selected{% endif %}>{{ model }}</option>
+                        <option class="model-option" value="{{ loop.index0 }}" {% if model == current_model %}selected{% endif %}>{{ model }}</option>
                     {% endfor %}
                 </select>
             </div>
